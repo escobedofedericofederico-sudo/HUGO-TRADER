@@ -2,6 +2,8 @@ name: HUGO-TRADER BTC-USD walk-forward
 
 on:
   workflow_dispatch:
+  push:
+    branches: [main]
 
 permissions:
   contents: read
