@@ -113,6 +113,9 @@ python research_lab.py prices.csv --train 120 --test 30 --step 30
   this terminal fee, avoiding a favorable mark-to-market comparison.
 - Reports each fold's selected SMA pair, training return, unseen test return and
   test drawdown.
+- Adds robustness diagnostics across unseen windows: median return, return variability,
+  longest consecutive losing streak, and the share of windows that beat buy-and-hold.
+  These describe consistency; they do not predict future returns.
 - A strategy is only labelled **candidate for more validation** after at least
   three test folds, positive average test return, at least 60% positive folds and
   no test-fold drawdown worse than 30%.
