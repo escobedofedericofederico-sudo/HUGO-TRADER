@@ -142,3 +142,16 @@ El informe muestra capital inicial, capital final, ganancia/pérdida neta en ARS
 ## Comparación con comprar y mantener y revisión de pérdidas
 
 Cada ventana fuera de muestra compara la estrategia SMA seleccionada con comprar BTC al primer cierre y vender al último cierre de esa misma ventana. El benchmark cobra comisión simulada tanto al entrar como al salir. El informe encadena por separado el capital de la estrategia y el benchmark, muestra en cuántas ventanas la estrategia supera a BTC y resume patrones para revisar en las ventanas perdedoras. Estas lecciones son diagnósticos descriptivos: no modifican parámetros automáticamente ni usan información futura para seleccionar la estrategia.
+
+
+## Motor de diagnóstico y aprendizaje controlado
+
+El motor nuevo lee la memoria SQLite y calcula expectativa, tasa de acierto, promedio de ganancia/pérdida, factor de beneficio y resultados por estrategia y motivo de salida. Si se proporciona el CSV histórico, atribuye cada operación al régimen conocido ANTES de su entrada; nunca usa el precio de entrada ni datos posteriores para etiquetar el contexto.
+
+```bash
+python learning_engine.py
+python learning_engine.py --prices prices.csv
+python learning_engine.py --prices prices.csv --min-samples 10 --json
+```
+
+El motor entrega diagnósticos y propuestas de revisión, pero no cambia parámetros ni ejecuta órdenes. Las muestras de backtests que se solapan pueden estar correlacionadas; el tamaño de la memoria no equivale al mismo número de experimentos independientes. Una estadística favorable no autoriza operar con dinero real.
