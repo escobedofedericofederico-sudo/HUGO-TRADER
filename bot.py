@@ -133,11 +133,11 @@ def backtest(
             j = i - 1
             if (fast_ma[j] is not None and slow_ma[j] is not None
                     and fast_ma[j] > slow_ma[j]):
-                # Risk budget limits exposure when a stop is defined; otherwise
-                # risk_per_trade is the maximum fraction of available cash deployed.
+                # risk_per_trade is the fraction of equity allowed to be lost
+                # at the stop. Convert that risk budget into position notional.
                 allocation = cash * risk_per_trade
                 if stop_loss is not None:
-                    allocation = min(allocation, cash * risk_per_trade / max(stop_loss, 1e-12))
+                    allocation = min(cash, cash * risk_per_trade / stop_loss)
                 units = allocation / (bar.close * (1 + fee_rate))
                 entry_cost = units * bar.close * (1 + fee_rate)
                 cash -= entry_cost
