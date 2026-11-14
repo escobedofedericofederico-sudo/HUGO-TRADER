@@ -108,6 +108,9 @@ python research_lab.py prices.csv --train 120 --test 30 --step 30
 - `--step`: distance between test-window starts (defaults to test size).
 - Each test fold starts as a fresh simulation; indicator warm-up occurs inside that
   test window, so no training trades or equity are carried into the test result.
+- At the final test close, any open SMA position is liquidated and charged the same
+  exit fee as the buy-and-hold benchmark. The reported SMA return and drawdown include
+  this terminal fee, avoiding a favorable mark-to-market comparison.
 - Reports each fold's selected SMA pair, training return, unseen test return and
   test drawdown.
 - A strategy is only labelled **candidate for more validation** after at least
