@@ -57,7 +57,7 @@ jobs:
 
       - name: Run HUGO-TRADER walk-forward
         run: |
-          python research_lab.py data/BTC-USD-2y-daily.csv --train 120 --test 30 --step 30 | tee reports/walk_forward.txt
+          python research_lab.py data/BTC-USD-2y-daily.csv --train 120 --test 30 --step 30 --capital-ars 20000 --fee 0.001 | tee reports/walk_forward.txt
 
       - name: Upload prices and research report
         uses: actions/upload-artifact@v4
