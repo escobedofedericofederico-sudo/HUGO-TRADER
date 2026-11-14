@@ -4,18 +4,19 @@ Educational quantitative-research project. **Paper backtesting only**: no broker
 
 ## Features
 
-- Simple moving-average crossover strategy (long-only).
-- Stop-loss and take-profit exits, checked against closing prices.
-- Position sizing from a configurable risk budget when a stop-loss is set.
-- Transaction fees, trade-by-trade realized P&L, win rate, profit factor.
-- Maximum drawdown and buy-and-hold benchmark comparison.
-- Compare several SMA pairs with one command.
-- Automated unit tests on pushes and pull requests to `main`.
+- Long-only simple moving-average crossover backtester.
+- Stop-loss, take-profit, position sizing, fees and drawdown.
+- Comparison with buy-and-hold and alternative SMA pairs.
+- **Persistent experience memory** in a local SQLite database.
+- Every closed simulated trade is classified as WIN, LOSS or BREAKEVEN.
+- Stores entry/exit, P&L, exit reason and a written lesson for each result.
+- Detects repeated loss patterns once there are at least five observations in a category.
+- Keeps experiment results to compare strategies over time.
+- Automated tests in GitHub Actions.
 
 ## Requirements
 
-- Python 3.10+
-- No third-party packages
+Python 3.10+; no third-party packages.
 
 ## Historical data
 
@@ -28,42 +29,58 @@ date,close
 2026-01-03,99.80
 ```
 
-Use at least `slow + 1` rows. Dates are labels; rows must be in chronological order.
+Use at least `slow + 1` rows, in chronological order.
 
-## Run a basic backtest
-
-```bash
-python bot.py prices.csv
-```
-
-## Risk controls
+## Run a backtest
 
 ```bash
-python bot.py prices.csv --fast 5 --slow 20 --cash 10000 --fee 0.001 --stop-loss 0.05 --take-profit 0.10 --risk 0.01
+python bot.py prices.csv --fast 5 --slow 20 --cash 10000 --fee 0.001
 ```
 
-- `--stop-loss 0.05`: exit after a 5% loss from entry, based on closing prices.
-- `--take-profit 0.10`: exit after a 10% gain from entry, based on closing prices.
-- `--risk 0.01`: risk budget of 1% of current cash/equity. When a stop is set, position notional is sized from the stop distance and capped at available cash. Without a stop, it limits the fraction of cash deployed.
-- `--fee 0.001`: 0.1% fee on each simulated transaction.
+### Risk controls
 
-Risk exits use closing prices, not intraday high/low. Stop execution can be worse than the stop threshold after a gap. Slippage, spread, taxes, dividends, shorting and partial fills are not modelled.
+```bash
+python bot.py prices.csv --stop-loss 0.05 --take-profit 0.10 --risk 0.01
+```
+
+- `--stop-loss 0.05`: close after a 5% adverse close-to-entry move.
+- `--take-profit 0.10`: close after a 10% favourable close-to-entry move.
+- `--risk 0.01`: risk budget used to size a position when a stop is supplied; without a stop it caps the cash allocation at 1%.
+- `--fee 0.001`: 0.1% fee per simulated transaction.
+
+Stop checks use closing prices, not intraday highs/lows. Gaps, spread, slippage, taxes, dividends and partial fills are not modelled.
+
+## Memory and learning from mistakes
+
+By default each run stores closed simulated trades in `hugo_memory.sqlite3` in the current folder. The database persists between runs and is intentionally excluded from Git.
+
+```bash
+# Read the accumulated memory and lessons
+python experience.py
+
+# Choose another local database
+python bot.py prices.csv --memory-db data/hugo_memory.sqlite3
+
+# Run without saving this experiment
+python bot.py prices.csv --no-memory
+```
+
+The memory labels outcomes by net P&L after simulated fees:
+- **LOSS**: negative realized P&L; records the exit reason and a review lesson.
+- **WIN**: positive realized P&L; records what happened without assuming it will repeat.
+- **BREAKEVEN**: approximately zero realized P&L.
+
+It summarizes win/loss counts, average and net P&L, worst trades, strategy history and repeated exit-reason patterns. A warning is shown only after at least five observations and a loss rate of 60% or more in that category.
+
+**Important distinction:** this is experience logging and statistical feedback, not a trained neural network. It does not automatically alter strategy parameters or place orders. It avoids claiming a pattern from one loss. The next research step is a walk-forward experiment runner with out-of-sample validation before any candidate strategy can be promoted.
 
 ## Compare strategies
 
 ```bash
-python bot.py prices.csv --compare --cash 10000 --fee 0.001
+python bot.py prices.csv --compare
 ```
 
-Compares SMA 3/10, 5/20 and 10/50 where enough data exists. Compare results on out-of-sample periods; do not choose parameters solely because they fit past prices.
-
-## Metrics
-
-- Strategy return and buy-and-hold return
-- Maximum peak-to-trough drawdown
-- Win rate of closed trades
-- Profit factor (gross winning P&L / gross losing P&L)
-- Closed trades and each entry/exit reason
+Compares SMA 3/10, 5/20 and 10/50 where enough rows exist.
 
 ## Tests
 
@@ -71,8 +88,6 @@ Compares SMA 3/10, 5/20 and 10/50 where enough data exists. Compare results on o
 python -m unittest discover -s tests -v
 ```
 
-GitHub Actions runs this suite automatically.
+## Safety
 
-## Important limitations
-
-This is a simplified educational simulator, not investment advice or a promise of returns. Signals use a completed previous close and simulated entries occur at the next close to reduce same-bar look-ahead, but real execution can differ materially. Backtests do not guarantee future performance. **Never add broker credentials or enable live trading based on these results.**
+This is an educational simulator, not investment advice or a promise of returns. Backtests do not guarantee future performance. Never commit API keys, passwords or broker credentials. Live trading is not implemented.
