@@ -83,7 +83,7 @@ def record_backtest(
             open_trade = trade
         elif trade.action == "SELL" and open_trade is not None:
             pnl = float(trade.pnl)
-            pnl_pct = (pnl / max(open_trade.price * 1.0, 1e-12)) * 100.0
+            pnl_pct = (trade.price / max(open_trade.price, 1e-12) - 1.0) * 100.0
             outcome = _outcome(pnl)
             fingerprint = "|".join((strategy, open_trade.date, trade.date,
                                     f"{open_trade.price:.10g}", f"{trade.price:.10g}"))
