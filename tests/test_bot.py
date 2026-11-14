@@ -128,6 +128,11 @@ class ResearchLabTests(unittest.TestCase):
         )
         self.assertEqual(len(report["folds"]), report["fold_count"])
         self.assertTrue(all("profit_ars" in fold for fold in report["folds"]))
+        self.assertTrue(all("buy_hold_test_return_pct" in fold for fold in report["folds"]))
+        self.assertTrue(all("edge_vs_buy_hold_pct" in fold for fold in report["folds"]))
+        self.assertGreater(report["buy_hold_ending_capital_ars"], 0)
+        self.assertEqual(report["strategy_wins_vs_buy_hold_folds"], sum(
+            fold["edge_vs_buy_hold_pct"] > 0 for fold in report["folds"]))
 
     def test_walk_forward_rejects_insufficient_history(self):
         from research_lab import walk_forward
