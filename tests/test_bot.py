@@ -107,6 +107,28 @@ class ResearchLabTests(unittest.TestCase):
             self.assertLess(int(fold["train_end"]), int(fold["test_start"]))
             self.assertIn((fold["selected_fast"], fold["selected_slow"]), ((2, 5), (3, 8)))
 
+
+    def test_walk_forward_reports_compounded_ars_capital(self):
+        from research_lab import walk_forward
+        prices = []
+        value = 100.0
+        for i in range(220):
+            drift = 0.35 if (i // 25) % 2 == 0 else -0.22
+            value = max(10.0, value + drift + ((i % 7) - 3) * 0.08)
+            prices.append(Bar(str(i), value))
+        report = walk_forward(
+            prices, candidates=((2, 5), (3, 8)),
+            train_size=80, test_size=20, step_size=20,
+            starting_capital_ars=20_000,
+        )
+        self.assertEqual(report["starting_capital_ars"], 20_000)
+        self.assertAlmostEqual(
+            report["ending_capital_ars"] - report["starting_capital_ars"],
+            report["net_profit_ars"],
+        )
+        self.assertEqual(len(report["folds"]), report["fold_count"])
+        self.assertTrue(all("profit_ars" in fold for fold in report["folds"]))
+
     def test_walk_forward_rejects_insufficient_history(self):
         from research_lab import walk_forward
         with self.assertRaises(ValueError):
