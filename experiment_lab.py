@@ -73,7 +73,9 @@ def run_experiments(
         raise ValueError("Se necesitan precios y candidatos")
     if train_size < 12 or test_size < 3 or step < 1:
         raise ValueError("Usá train >= 12, test >= 3 y step >= 1")
-    if initial_cash <= 0 or not 0 <= fee_rate < 1 or min_trades < 0:
+    if (not math.isfinite(initial_cash) or initial_cash <= 0
+            or not math.isfinite(fee_rate) or not 0 <= fee_rate < 1
+            or min_trades < 0):
         raise ValueError("Parámetros de capital, comisión o min_trades inválidos")
     if any(c.fast < 1 or c.slow <= c.fast for c in configs):
         raise ValueError("Cada candidato requiere 1 <= fast < slow")
@@ -87,7 +89,10 @@ def run_experiments(
     if any(not math.isfinite(bar.close) or bar.close <= 0 for bar in data):
         raise ValueError("Todos los precios deben ser finitos y positivos")
 
-    eligible = tuple(c for c in configs if c.slow + 1 <= test_size)
+    eligible = tuple(
+        c for c in configs
+        if c.slow + 1 <= train_size and c.slow + 1 <= test_size
+    )
     if not eligible:
         raise ValueError("Ningún candidato cabe en test_size; aumentalo o reducí slow")
     folds = []

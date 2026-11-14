@@ -11,6 +11,17 @@ class ExperimentLabTests(unittest.TestCase):
             run_experiments(bars, [Candidate(10, 5, None, 1.0)],
                             train_size=12, test_size=12)
 
+    def test_requires_candidate_to_fit_both_windows(self):
+        bars = [Bar(f"2025-{(i // 28) + 1:02d}-{(i % 28) + 1:02d}",
+                    100 + i * 0.5 + (i % 7))
+                for i in range(1, 101)]
+        report = run_experiments(
+            bars, [Candidate(3, 10, None, 1.0), Candidate(10, 50, None, 1.0)],
+            train_size=20, test_size=60, step_size=60, min_trades=0,
+        )
+        self.assertEqual(report["fold_count"], 1)
+        self.assertTrue(all("SMA 3/10" in fold["selected"] for fold in report["folds"]))
+
     def test_requires_candidate_to_fit_test_window(self):
         bars = [Bar(f"2025-{i // 28 + 1:02d}-{i % 28 + 1:02d}", 100 + i)
                 for i in range(1, 80)]
