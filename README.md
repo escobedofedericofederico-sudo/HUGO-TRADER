@@ -131,3 +131,8 @@ python research_lab.py prices.csv --train 120 --test 30 --step 30 --capital-ars 
 El informe muestra capital inicial, capital final, ganancia/pérdida neta en ARS y el detalle por ventana, con capital compuesto. La comisión configurada por defecto en el workflow es 0,1% por operación simulada.
 
 **Limitación cambiaria:** los precios usados son BTC-USD. La conversión a pesos es una simulación proporcional que mantiene constante el tipo de cambio ARS/USD; no incorpora variación del dólar, spread cambiario, impuestos ni comisiones de un exchange argentino. Por eso el resultado en ARS es ilustrativo, no una cotización ejecutable ni una promesa de rendimiento. Los folds se simulan de forma independiente y sus rendimientos se encadenan para estimar el efecto compuesto; no es una cuenta conectada a un broker.
+
+
+## Comparación con comprar y mantener y revisión de pérdidas
+
+Cada ventana fuera de muestra compara la estrategia SMA seleccionada con comprar BTC al primer cierre y vender al último cierre de esa misma ventana. El benchmark cobra comisión simulada tanto al entrar como al salir. El informe encadena por separado el capital de la estrategia y el benchmark, muestra en cuántas ventanas la estrategia supera a BTC y resume patrones para revisar en las ventanas perdedoras. Estas lecciones son diagnósticos descriptivos: no modifican parámetros automáticamente ni usan información futura para seleccionar la estrategia.
