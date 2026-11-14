@@ -61,9 +61,9 @@ def walk_forward(
     while test_start + test_size <= len(data):
         train = data[test_start - train_size:test_start]
         test = data[test_start:test_start + test_size]
-        eligible = [(f, s) for f, s in pairs if len(train) >= s + 1]
+        eligible = [(f, s) for f, s in pairs if len(train) >= s + 1 and len(test) >= s + 1]
         if not eligible:
-            raise ValueError("Training window is too short for all candidate slow periods")
+            raise ValueError("No candidate fits both the training and test windows; increase --test or reduce slow periods")
 
         # Select solely on training data. Stable tie-break favours simpler/faster pair.
         ranked = []
