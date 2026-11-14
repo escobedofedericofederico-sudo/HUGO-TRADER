@@ -2,7 +2,7 @@ import os
 import tempfile
 import unittest
 
-from bot import Bar, Trade, backtest, moving_average
+from bot import Bar, Trade, backtest, load_bars, moving_average
 from experience import learning_report, record_backtest
 
 
@@ -51,6 +51,31 @@ class BotTests(unittest.TestCase):
     def test_invalid_stop_loss(self):
         with self.assertRaises(ValueError):
             backtest(self.make_bars([10] * 8), fast=2, slow=3, stop_loss=1)
+
+    def test_backtest_rejects_non_finite_prices(self):
+        bars = self.make_bars([10, 11, 12, float("nan")])
+        with self.assertRaises(ValueError):
+            backtest(bars, fast=2, slow=3)
+
+    def test_csv_loader_rejects_non_finite_prices(self):
+        with tempfile.NamedTemporaryFile("w", suffix=".csv", delete=False) as handle:
+            handle.write("date,close\\n2025-01-01,inf\\n")
+            path = handle.name
+        try:
+            with self.assertRaises(ValueError):
+                load_bars(path)
+        finally:
+            os.unlink(path)
+
+    def test_stop_risk_budget_controls_position_notional(self):
+        prices = [10, 9, 8, 9, 10, 11, 12, 13]
+        result = backtest(
+            self.make_bars(prices), fast=2, slow=3,
+            initial_cash=1000, fee_rate=0, stop_loss=0.05,
+            risk_per_trade=0.01,
+        )
+        buy = next(trade for trade in result["trades"] if trade.action == "BUY")
+        self.assertAlmostEqual(result["open_units"] * buy.price, 200.0)
 
     def test_memory_remembers_loss_and_prevents_duplicate(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -101,6 +126,8 @@ class ResearchLabTests(unittest.TestCase):
         self.assertAlmostEqual(adjusted["terminal_liquidation_fee"], expected_fee)
         self.assertAlmostEqual(adjusted["final_value"], result["final_value"] - expected_fee)
         self.assertLess(adjusted["return_pct"], result["return_pct"])
+        self.assertLess(adjusted["max_drawdown_pct"], 0.0)
+        self.assertEqual(adjusted["open_units"], 0.0)
 
     def test_walk_forward_uses_multiple_unseen_test_folds(self):
         from research_lab import walk_forward
@@ -158,6 +185,12 @@ class ResearchLabTests(unittest.TestCase):
         from research_lab import walk_forward
         with self.assertRaises(ValueError):
             walk_forward([Bar(str(i), 100 + i) for i in range(30)],
+                         candidates=((2, 5),), train_size=20, test_size=20)
+
+    def test_walk_forward_requires_market_context_history(self):
+        from research_lab import walk_forward
+        with self.assertRaisesRegex(ValueError, "train_size >= 21"):
+            walk_forward([Bar(str(i), 100 + i) for i in range(80)],
                          candidates=((2, 5),), train_size=20, test_size=20)
 
     def test_walk_forward_rejects_invalid_candidates(self):

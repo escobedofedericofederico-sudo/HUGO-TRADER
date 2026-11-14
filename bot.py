@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import argparse
 import csv
+import math
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Iterable
@@ -38,8 +39,8 @@ def load_bars(path: str | Path) -> list[Bar]:
                 close = float(normalized["close"])
             except (TypeError, ValueError, KeyError) as exc:
                 raise ValueError(f"Invalid close price in row: {row}") from exc
-            if close <= 0:
-                raise ValueError(f"Close price must be positive: {row}")
+            if not math.isfinite(close) or close <= 0:
+                raise ValueError(f"Close price must be finite and positive: {row}")
             bars.append(Bar(str(normalized.get("date", "")), close))
     if not bars:
         raise ValueError("CSV contains no price rows")
@@ -49,6 +50,8 @@ def load_bars(path: str | Path) -> list[Bar]:
 def moving_average(values: list[float], period: int) -> list[float | None]:
     if period < 1:
         raise ValueError("Moving-average period must be at least 1")
+    if any(not math.isfinite(float(value)) for value in values):
+        raise ValueError("Moving-average values must be finite")
     result: list[float | None] = []
     rolling = 0.0
     for i, value in enumerate(values):
@@ -67,6 +70,40 @@ def _drawdown(values: list[float]) -> float:
         if peak > 0:
             worst = min(worst, (value / peak - 1.0) * 100.0)
     return worst
+
+
+def liquidate_at_close(result: dict, bars: Iterable[Bar], fee_rate: float) -> dict:
+    """Return a copy of a backtest result with any open position sold at the last close.
+
+    The exit fee is included in both final return and the final equity observation,
+    so drawdown and candidate scores use the same flat-at-close assumption.
+    """
+    data = list(bars)
+    if not data:
+        raise ValueError("At least one bar is required for terminal liquidation")
+    if not math.isfinite(fee_rate) or not 0 <= fee_rate < 1:
+        raise ValueError("fee_rate must be finite and in [0, 1)")
+    final_close = float(data[-1].close)
+    if not math.isfinite(final_close) or final_close <= 0:
+        raise ValueError("Final close must be finite and positive")
+
+    adjusted = dict(result)
+    units = float(result.get("open_units", 0.0))
+    exit_fee = units * final_close * fee_rate
+    final_value = float(result["final_value"]) - exit_fee
+    adjusted["final_value"] = final_value
+    adjusted["terminal_liquidation_fee"] = exit_fee
+    adjusted["return_pct"] = (
+        final_value / float(result["initial_cash"]) - 1.0
+    ) * 100.0
+
+    curve = list(result.get("equity_curve", []))
+    if curve:
+        curve[-1] = final_value
+        adjusted["max_drawdown_pct"] = _drawdown(curve)
+        adjusted["equity_curve"] = curve
+    adjusted["open_units"] = 0.0
+    return adjusted
 
 
 def backtest(
@@ -88,18 +125,23 @@ def backtest(
     data = list(bars)
     if fast < 1 or slow < 2 or fast >= slow:
         raise ValueError("Require 1 <= fast < slow")
-    if initial_cash <= 0 or not 0 <= fee_rate < 1:
+    if (not math.isfinite(initial_cash) or initial_cash <= 0
+            or not math.isfinite(fee_rate) or not 0 <= fee_rate < 1):
         raise ValueError("Invalid initial cash or fee rate")
-    if stop_loss is not None and not 0 < stop_loss < 1:
+    if stop_loss is not None and (
+        not math.isfinite(stop_loss) or not 0 < stop_loss < 1
+    ):
         raise ValueError("stop_loss must be between 0 and 1 (e.g. 0.05)")
-    if take_profit is not None and take_profit <= 0:
-        raise ValueError("take_profit must be greater than 0 (e.g. 0.10)")
-    if not 0 < risk_per_trade <= 1:
-        raise ValueError("risk_per_trade must be in (0, 1]")
+    if take_profit is not None and (
+        not math.isfinite(take_profit) or take_profit <= 0
+    ):
+        raise ValueError("take_profit must be finite and greater than 0 (e.g. 0.10)")
+    if not math.isfinite(risk_per_trade) or not 0 < risk_per_trade <= 1:
+        raise ValueError("risk_per_trade must be finite and in (0, 1]")
     if len(data) < slow + 1:
         raise ValueError(f"Need at least {slow + 1} price rows")
-    if any(bar.close <= 0 for bar in data):
-        raise ValueError("All close prices must be positive")
+    if any(not math.isfinite(bar.close) or bar.close <= 0 for bar in data):
+        raise ValueError("All close prices must be finite and positive")
 
     closes = [bar.close for bar in data]
     fast_ma, slow_ma = moving_average(closes, fast), moving_average(closes, slow)
@@ -180,7 +222,8 @@ def main() -> None:
     parser.add_argument("--take-profit", type=float, default=None,
                         help="Take profit fraction, e.g. 0.10 for 10%%")
     parser.add_argument("--risk", type=float, default=1.0,
-                        help="Maximum fraction of cash allocated per trade (0-1)")
+                        help=("Risk budget as a fraction of equity when --stop-loss is set; "
+                              "without a stop it caps cash allocation (0-1)"))
     parser.add_argument("--memory-db", default="hugo_memory.sqlite3",
                         help="SQLite file for persistent experience memory")
     parser.add_argument("--no-memory", action="store_true",

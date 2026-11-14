@@ -6,12 +6,13 @@ that selected pair on the immediately following, unseen test window.
 from __future__ import annotations
 
 import argparse
+import math
 import statistics
 from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Iterable
 
-from bot import Bar, backtest, load_bars
+from bot import Bar, backtest, liquidate_at_close, load_bars
 from market_context import classify_market_context
 
 
@@ -48,27 +49,8 @@ def _score(result: dict) -> float:
 
 
 def _charge_terminal_liquidation(result: dict, bars: list[Bar], fee_rate: float) -> dict:
-    """Mark every test strategy flat at the final close and charge its exit fee."""
-    adjusted = dict(result)
-    units = float(result["open_units"])
-    exit_fee = units * bars[-1].close * fee_rate
-    final_value = float(result["final_value"]) - exit_fee
-    adjusted["final_value"] = final_value
-    adjusted["terminal_liquidation_fee"] = exit_fee
-    adjusted["return_pct"] = (final_value / float(result["initial_cash"]) - 1.0) * 100.0
-
-    # Include the liquidation fee in the final equity observation and drawdown.
-    curve = list(result["equity_curve"])
-    if curve:
-        curve[-1] = final_value
-        peak = curve[0]
-        worst = 0.0
-        for value in curve:
-            peak = max(peak, value)
-            if peak > 0:
-                worst = min(worst, (value / peak - 1.0) * 100.0)
-        adjusted["max_drawdown_pct"] = worst
-    return adjusted
+    """Backward-compatible wrapper for the shared flat-at-close adjustment."""
+    return liquidate_at_close(result, bars, fee_rate)
 
 
 def _longest_streak(flags: list[bool]) -> int:
@@ -95,12 +77,14 @@ def walk_forward(
     step = test_size if step_size is None else step_size
     if starting_capital_ars <= 0 or not 0 <= fee_rate < 1:
         raise ValueError("Capital must be positive and fee_rate must be in [0, 1)")
-    if train_size < 12 or test_size < 3 or step < 1:
-        raise ValueError("Use train_size >= 12, test_size >= 3 and step_size >= 1")
+    if train_size < 21 or test_size < 3 or step < 1:
+        raise ValueError(
+            "Use train_size >= 21 (20-bar market context), test_size >= 3 and step_size >= 1"
+        )
     if not pairs or any(f < 1 or s < 2 or f >= s for f, s in pairs):
         raise ValueError("Candidates must contain valid SMA pairs (fast < slow)")
-    if any(b.close <= 0 for b in data):
-        raise ValueError("All close prices must be positive")
+    if any(not math.isfinite(b.close) or b.close <= 0 for b in data):
+        raise ValueError("All close prices must be finite and positive")
 
     folds: list[FoldResult] = []
     test_start = train_size
@@ -122,6 +106,9 @@ def walk_forward(
         for fast, slow in eligible:
             result = backtest(train, fast=fast, slow=slow,
                               initial_cash=initial_cash, fee_rate=fee_rate)
+            # Score training candidates under the same flat-at-close fee
+            # assumption used for their unseen test window.
+            result = liquidate_at_close(result, train, fee_rate)
             ranked.append((_score(result), -slow, -fast, fast, slow, result))
         _, _, _, chosen_fast, chosen_slow, train_result = max(ranked, key=lambda x: x[:3])
 
