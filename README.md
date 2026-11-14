@@ -91,3 +91,30 @@ python -m unittest discover -s tests -v
 ## Safety
 
 This is an educational simulator, not investment advice or a promise of returns. Backtests do not guarantee future performance. Never commit API keys, passwords or broker credentials. Live trading is not implemented.
+
+
+## Walk-forward research lab (out-of-sample)
+
+The research lab selects an SMA pair on a historical training window, then evaluates
+that selected pair on the next unseen test window. It repeats this process through
+the available history. Candidate selection never reads the corresponding test window.
+
+```bash
+python research_lab.py prices.csv --train 120 --test 30 --step 30
+```
+
+- `--train`: number of historical rows used to select a candidate.
+- `--test`: number of subsequent unseen rows used for evaluation.
+- `--step`: distance between test-window starts (defaults to test size).
+- Each test fold starts as a fresh simulation; indicator warm-up occurs inside that
+  test window, so no training trades or equity are carried into the test result.
+- Reports each fold's selected SMA pair, training return, unseen test return and
+  test drawdown.
+- A strategy is only labelled **candidate for more validation** after at least
+  three test folds, positive average test return, at least 60% positive folds and
+  no test-fold drawdown worse than 30%.
+
+This gate is deliberately conservative but is not proof of an edge. The lab does
+not model intraday execution, spread, slippage, taxes, dividends or survivorship
+bias, and short test windows can be noisy. Do not use the label as permission for
+live trading. More data and independent validation are required.
