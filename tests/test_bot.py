@@ -85,3 +85,36 @@ class BotTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class ResearchLabTests(unittest.TestCase):
+    def test_walk_forward_uses_multiple_unseen_test_folds(self):
+        from research_lab import walk_forward
+        prices = []
+        value = 100.0
+        for i in range(220):
+            # Deterministic varied series with trends and reversals.
+            drift = 0.35 if (i // 25) % 2 == 0 else -0.22
+            value = max(10.0, value + drift + ((i % 7) - 3) * 0.08)
+            prices.append(Bar(str(i), value))
+        report = walk_forward(
+            prices, candidates=((2, 5), (3, 8)),
+            train_size=80, test_size=20, step_size=20,
+        )
+        self.assertGreaterEqual(report["fold_count"], 3)
+        self.assertEqual(len(report["folds"]), report["fold_count"])
+        for fold in report["folds"]:
+            self.assertLess(int(fold["train_end"]), int(fold["test_start"]))
+            self.assertIn((fold["selected_fast"], fold["selected_slow"]), ((2, 5), (3, 8)))
+
+    def test_walk_forward_rejects_insufficient_history(self):
+        from research_lab import walk_forward
+        with self.assertRaises(ValueError):
+            walk_forward([Bar(str(i), 100 + i) for i in range(30)],
+                         candidates=((2, 5),), train_size=20, test_size=20)
+
+    def test_walk_forward_rejects_invalid_candidates(self):
+        from research_lab import walk_forward
+        with self.assertRaises(ValueError):
+            walk_forward([Bar(str(i), 100 + i) for i in range(80)],
+                         candidates=((5, 5),), train_size=40, test_size=20)
