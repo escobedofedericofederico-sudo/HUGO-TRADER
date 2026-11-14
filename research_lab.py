@@ -26,6 +26,9 @@ class FoldResult:
     test_return_pct: float
     test_drawdown_pct: float
     test_closed_trades: int
+    capital_start_ars: float
+    profit_ars: float
+    capital_end_ars: float
 
 
 DEFAULT_CANDIDATES = ((3, 10), (5, 20), (8, 21), (10, 30), (10, 50))
@@ -44,10 +47,13 @@ def walk_forward(
     step_size: int | None = None,
     initial_cash: float = 10_000.0,
     fee_rate: float = 0.001,
+    starting_capital_ars: float = 20_000.0,
 ) -> dict:
     data = list(bars)
     pairs = tuple((int(f), int(s)) for f, s in candidates)
     step = test_size if step_size is None else step_size
+    if starting_capital_ars <= 0 or not 0 <= fee_rate < 1:
+        raise ValueError("Capital must be positive and fee_rate must be in [0, 1)")
     if train_size < 12 or test_size < 3 or step < 1:
         raise ValueError("Use train_size >= 12, test_size >= 3 and step_size >= 1")
     if not pairs or any(f < 1 or s < 2 or f >= s for f, s in pairs):
@@ -58,6 +64,7 @@ def walk_forward(
     folds: list[FoldResult] = []
     test_start = train_size
     fold_no = 1
+    simulated_capital_ars = float(starting_capital_ars)
     while test_start + test_size <= len(data):
         train = data[test_start - train_size:test_start]
         test = data[test_start:test_start + test_size]
@@ -77,6 +84,9 @@ def walk_forward(
         # consumed by indicator warm-up; no training trades or equity leak into it.
         test_result = backtest(test, fast=chosen_fast, slow=chosen_slow,
                                initial_cash=initial_cash, fee_rate=fee_rate)
+        capital_before = simulated_capital_ars
+        profit_ars = capital_before * (test_result["return_pct"] / 100.0)
+        simulated_capital_ars = capital_before + profit_ars
         folds.append(FoldResult(
             fold=fold_no,
             train_start=train[0].date, train_end=train[-1].date,
@@ -86,6 +96,9 @@ def walk_forward(
             test_return_pct=test_result["return_pct"],
             test_drawdown_pct=test_result["max_drawdown_pct"],
             test_closed_trades=test_result["closed_trades"],
+            capital_start_ars=capital_before,
+            profit_ars=profit_ars,
+            capital_end_ars=simulated_capital_ars,
         ))
         fold_no += 1
         test_start += step
@@ -106,6 +119,10 @@ def walk_forward(
         "average_test_return_pct": average,
         "positive_test_folds": positive,
         "positive_fold_rate_pct": positive / len(folds) * 100,
+        "starting_capital_ars": starting_capital_ars,
+        "ending_capital_ars": simulated_capital_ars,
+        "net_profit_ars": simulated_capital_ars - starting_capital_ars,
+        "compounded_return_pct": (simulated_capital_ars / starting_capital_ars - 1) * 100,
         "worst_test_return_pct": min(returns),
         "promotion_candidate": promoted,
         "decision": ("CANDIDATA PARA MÁS VALIDACIÓN" if promoted
@@ -122,11 +139,14 @@ def main() -> None:
     parser.add_argument("--test", type=int, default=30)
     parser.add_argument("--step", type=int, default=None)
     parser.add_argument("--cash", type=float, default=10_000)
+    parser.add_argument("--capital-ars", type=float, default=20_000,
+                        help="Capital inicial de referencia en pesos argentinos; tipo de cambio constante")
     parser.add_argument("--fee", type=float, default=0.001)
     args = parser.parse_args()
     report = walk_forward(load_bars(args.csv), train_size=args.train,
                           test_size=args.test, step_size=args.step,
-                          initial_cash=args.cash, fee_rate=args.fee)
+                          initial_cash=args.cash, fee_rate=args.fee,
+                          starting_capital_ars=args.capital_ars)
     print("HUGO-TRADER — WALK-FORWARD (solo simulación)")
     for fold in report["folds"]:
         print(f"Fold {fold['fold']}: SMA {fold['selected_fast']}/{fold['selected_slow']} | "
@@ -135,6 +155,13 @@ def main() -> None:
               f"DD test {fold['test_drawdown_pct']:.2f}%")
     print(f"Promedio fuera de muestra: {report['average_test_return_pct']:.2f}%")
     print(f"Folds positivos: {report['positive_test_folds']}/{report['fold_count']}")
+    print("\nSIMULACIÓN COMPUESTA — CAPITAL TEÓRICO EN ARS")
+    print(f"Capital inicial: ${report['starting_capital_ars']:,.2f}")
+    print(f"Capital final:   ${report['ending_capital_ars']:,.2f}")
+    print(f"Ganancia/Pérdida: ${report['net_profit_ars']:+,.2f} ({report['compounded_return_pct']:.2f}%)")
+    for fold in report["folds"]:
+        print(f"  Fold {fold['fold']:02d}: ${fold['capital_start_ars']:,.2f} → ${fold['capital_end_ars']:,.2f} ({fold['profit_ars']:+,.2f} ARS)")
+    print("Supuesto: dólar constante; no incluye variación ARS/USD ni costos locales de conversión.")
     print(report["decision"])
     print(report["warning"])
 
