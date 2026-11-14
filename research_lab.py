@@ -155,6 +155,36 @@ def walk_forward(
         raise ValueError("Not enough rows for one complete train + test fold")
 
     returns = [f.test_return_pct for f in folds]
+    # Aggregate outcomes by the SMA pair selected in training. This is
+    # descriptive feedback only; it never changes parameters using test data.
+    pair_performance = {}
+    for fold in folds:
+        key = f"SMA {fold.selected_fast}/{fold.selected_slow}"
+        pair_performance.setdefault(key, []).append(fold)
+    pair_diagnostics = {
+        key: {
+            "folds": len(items),
+            "wins": sum(item.test_return_pct > 0 for item in items),
+            "losses": sum(item.test_return_pct < 0 for item in items),
+            "average_test_return_pct": sum(item.test_return_pct for item in items) / len(items),
+            "average_edge_vs_buy_hold_pct": sum(item.edge_vs_buy_hold_pct for item in items) / len(items),
+            "worst_drawdown_pct": min(item.test_drawdown_pct for item in items),
+        }
+        for key, items in sorted(pair_performance.items())
+    }
+    loss_lessons = []
+    for key, stats in pair_diagnostics.items():
+        if stats["losses"]:
+            loss_lessons.append(
+                f"{key}: {stats['losses']} pérdidas en {stats['folds']} ventanas; "
+                f"promedio OOS {stats['average_test_return_pct']:.2f}% "
+                f"y ventaja media vs BTC {stats['average_edge_vs_buy_hold_pct']:+.2f} pp. "
+                "Revisar si la señal llega tarde en cambios de tendencia."
+            )
+    if any(f.test_drawdown_pct < -10 for f in folds):
+        loss_lessons.append("Hubo una ventana con drawdown superior al 10%; probar límites de riesgo y gaps.")
+    if not loss_lessons:
+        loss_lessons.append("No hubo pérdidas en estas ventanas; ampliar muestra antes de concluir que el riesgo es bajo.")
     positive = sum(value > 0 for value in returns)
     average = sum(returns) / len(returns)
     # Conservative research gate; this is a filter, not proof of future profit.
@@ -174,7 +204,8 @@ def walk_forward(
         "strategy_edge_vs_buy_hold_ars": simulated_capital_ars - buy_hold_capital_ars,
         "strategy_wins_vs_buy_hold_folds": sum(f.edge_vs_buy_hold_pct > 0 for f in folds),
         "losing_folds": sum(f.test_return_pct < 0 for f in folds),
-        "loss_lessons": sorted({"Revisar señales falsas y filtros de tendencia/mercado lateral." for f in folds if f.test_return_pct < 0}),
+        "loss_lessons": loss_lessons,
+        "pair_diagnostics": pair_diagnostics,
         "net_profit_ars": simulated_capital_ars - starting_capital_ars,
         "compounded_return_pct": (simulated_capital_ars / starting_capital_ars - 1) * 100,
         "worst_test_return_pct": min(returns),
@@ -221,6 +252,12 @@ def main() -> None:
     print(f"Ventanas que superaron BTC: {report['edge_positive_folds']}/{report['fold_count']} ({report['edge_positive_rate_pct']:.1f}%)")
     print(f"BTC comprar y mantener: ${report['buy_hold_ending_capital_ars']:,.2f} ({report['buy_hold_compounded_return_pct']:.2f}%)")
     print(f"Ventaja neta vs BTC hold: ${report['strategy_edge_vs_buy_hold_ars']:+,.2f}; superó a BTC en {report['strategy_wins_vs_buy_hold_folds']}/{report['fold_count']} ventanas")
+    print("DIAGNÓSTICO POR ESTRATEGIA ELEGIDA EN TRAINING:")
+    for pair, stats in report["pair_diagnostics"].items():
+        print(f"- {pair}: {stats['wins']} ganadoras / {stats['losses']} perdedoras "
+              f"en {stats['folds']} ventanas | promedio OOS "
+              f"{stats['average_test_return_pct']:.2f}% | "
+              f"ventaja media vs BTC {stats['average_edge_vs_buy_hold_pct']:+.2f} pp")
     print("LECCIONES DE VENTANAS PERDEDORAS:")
     for lesson in report["loss_lessons"]:
         print(f"- {lesson}")
