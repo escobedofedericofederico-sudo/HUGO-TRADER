@@ -181,6 +181,10 @@ def main() -> None:
                         help="Take profit fraction, e.g. 0.10 for 10%%")
     parser.add_argument("--risk", type=float, default=1.0,
                         help="Maximum fraction of cash allocated per trade (0-1)")
+    parser.add_argument("--memory-db", default="hugo_memory.sqlite3",
+                        help="SQLite file for persistent experience memory")
+    parser.add_argument("--no-memory", action="store_true",
+                        help="Do not save this backtest to experience memory")
     parser.add_argument("--compare", action="store_true",
                         help="Compare common SMA pairs: 3/10, 5/20, 10/50")
     args = parser.parse_args()
@@ -199,6 +203,13 @@ def main() -> None:
         print(f"Strategy return: {result['return_pct']:.2f}% | Buy & hold: {result['buy_hold_return_pct']:.2f}%")
         print(f"Max drawdown: {result['max_drawdown_pct']:.2f}% | Win rate: {result['win_rate_pct']:.2f}%")
         print(f"Profit factor: {pf} | Closed trades: {result['closed_trades']}")
+        if not args.no_memory:
+            from experience import record_backtest, learning_report
+            saved = record_backtest(result["trades"], f"SMA {fast}/{slow}", result, args.memory_db)
+            memory = learning_report(args.memory_db)
+            print(f"Memoria: {saved['new_trades_saved']} nuevas operaciones guardadas; "
+                  f"{memory['total_trades']} experiencias acumuladas; "
+                  f"{memory['losses']} pérdidas detectadas.")
         for trade in result["trades"]:
             suffix = f" | PnL {trade.pnl:.2f} | {trade.reason}" if trade.action == "SELL" else ""
             print(f"{trade.date} {trade.action} @ {trade.price:.4f}{suffix}")
