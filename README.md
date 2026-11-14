@@ -155,3 +155,16 @@ python learning_engine.py --prices prices.csv --min-samples 10 --json
 ```
 
 El motor entrega diagnósticos y propuestas de revisión, pero no cambia parámetros ni ejecuta órdenes. Las muestras de backtests que se solapan pueden estar correlacionadas; el tamaño de la memoria no equivale al mismo número de experimentos independientes. Una estadística favorable no autoriza operar con dinero real.
+
+
+## Laboratorio de experimentos controlados
+
+`experiment_lab.py` compara configuraciones predefinidas de SMA, stop-loss y tamaño de posición mediante ventanas walk-forward. En cada ventana elige la configuración exclusivamente con el bloque de entrenamiento y la evalúa en el bloque posterior no visto. No modifica la configuración principal, no guarda operaciones en la memoria, no despliega estrategias y no ejecuta órdenes.
+
+```bash
+python experiment_lab.py prices.csv
+python experiment_lab.py prices.csv --train 180 --test 60 --step 60 --cash 10000 --fee 0.001
+python experiment_lab.py prices.csv --json
+```
+
+La salida es investigación, no recomendación de inversión. Las ventanas pueden solaparse y no son experimentos estadísticamente independientes. Toda configuración elegida requiere validación adicional antes de cualquier uso fuera de simulación.
