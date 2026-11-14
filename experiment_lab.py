@@ -29,12 +29,15 @@ class Candidate:
 
 
 def default_candidates() -> tuple[Candidate, ...]:
-    return tuple(
-        Candidate(fast, slow, stop, risk)
-        for fast, slow in ((3, 10), (5, 20), (10, 50))
-        for stop in (None, 0.05, 0.10)
-        for risk in (0.5, 1.0)
-    )
+    configs = []
+    for fast, slow in ((3, 10), (5, 20), (10, 50)):
+        configs.append(Candidate(fast, slow, None, 1.0))
+        for stop in (0.05, 0.10):
+            # risk_per_trade is the equity fraction risked at the stop,
+            # not the fraction of capital allocated to the position.
+            for risk in (0.01, 0.02):
+                configs.append(Candidate(fast, slow, stop, risk))
+    return tuple(configs)
 
 
 def _score(result: dict) -> float:
