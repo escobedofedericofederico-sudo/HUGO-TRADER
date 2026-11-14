@@ -118,3 +118,16 @@ This gate is deliberately conservative but is not proof of an edge. The lab does
 not model intraday execution, spread, slippage, taxes, dividends or survivorship
 bias, and short test windows can be noisy. Do not use the label as permission for
 live trading. More data and independent validation are required.
+
+
+## Simular con $20.000 ARS en walk-forward
+
+El laboratorio calcula el efecto de encadenar los rendimientos de cada ventana fuera de muestra sobre un capital inicial de referencia:
+
+```bash
+python research_lab.py prices.csv --train 120 --test 30 --step 30 --capital-ars 20000 --fee 0.001
+```
+
+El informe muestra capital inicial, capital final, ganancia/pérdida neta en ARS y el detalle por ventana, con capital compuesto. La comisión configurada por defecto en el workflow es 0,1% por operación simulada.
+
+**Limitación cambiaria:** los precios usados son BTC-USD. La conversión a pesos es una simulación proporcional que mantiene constante el tipo de cambio ARS/USD; no incorpora variación del dólar, spread cambiario, impuestos ni comisiones de un exchange argentino. Por eso el resultado en ARS es ilustrativo, no una cotización ejecutable ni una promesa de rendimiento. Los folds se simulan de forma independiente y sus rendimientos se encadenan para estimar el efecto compuesto; no es una cuenta conectada a un broker.
