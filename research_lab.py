@@ -42,6 +42,30 @@ def _score(result: dict) -> float:
     return result["return_pct"] - 0.5 * abs(result["max_drawdown_pct"])
 
 
+def _charge_terminal_liquidation(result: dict, bars: list[Bar], fee_rate: float) -> dict:
+    """Mark every test strategy flat at the final close and charge its exit fee."""
+    adjusted = dict(result)
+    units = float(result["open_units"])
+    exit_fee = units * bars[-1].close * fee_rate
+    final_value = float(result["final_value"]) - exit_fee
+    adjusted["final_value"] = final_value
+    adjusted["terminal_liquidation_fee"] = exit_fee
+    adjusted["return_pct"] = (final_value / float(result["initial_cash"]) - 1.0) * 100.0
+
+    # Include the liquidation fee in the final equity observation and drawdown.
+    curve = list(result["equity_curve"])
+    if curve:
+        curve[-1] = final_value
+        peak = curve[0]
+        worst = 0.0
+        for value in curve:
+            peak = max(peak, value)
+            if peak > 0:
+                worst = min(worst, (value / peak - 1.0) * 100.0)
+        adjusted["max_drawdown_pct"] = worst
+    return adjusted
+
+
 def walk_forward(
     bars: Iterable[Bar],
     candidates: Iterable[tuple[int, int]] = DEFAULT_CANDIDATES,
@@ -88,6 +112,9 @@ def walk_forward(
         # consumed by indicator warm-up; no training trades or equity leak into it.
         test_result = backtest(test, fast=chosen_fast, slow=chosen_slow,
                                initial_cash=initial_cash, fee_rate=fee_rate)
+        # Force a fair comparison: both SMA and buy-and-hold are liquidated
+        # at the final test close and pay an exit fee, even if SMA holds BTC.
+        test_result = _charge_terminal_liquidation(test_result, test, fee_rate)
         capital_before = simulated_capital_ars
         profit_ars = capital_before * (test_result["return_pct"] / 100.0)
         simulated_capital_ars = capital_before + profit_ars
