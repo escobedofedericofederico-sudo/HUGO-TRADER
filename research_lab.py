@@ -12,6 +12,7 @@ from pathlib import Path
 from typing import Iterable
 
 from bot import Bar, backtest, load_bars
+from market_context import classify_market_context
 
 
 @dataclass(frozen=True)
@@ -33,6 +34,9 @@ class FoldResult:
     profit_ars: float
     capital_end_ars: float
     buy_hold_capital_end_ars: float
+    market_regime_at_test_start: str
+    annualized_volatility_at_test_start_pct: float
+    volatility_state_at_test_start: str
 
 
 DEFAULT_CANDIDATES = ((3, 10), (5, 20), (8, 21), (10, 30), (10, 50))
@@ -110,6 +114,9 @@ def walk_forward(
         if not eligible:
             raise ValueError("No candidate fits both the training and test windows; increase --test or reduce slow periods")
 
+        # Context is calculated only from prices available before the test starts.
+        context = classify_market_context([bar.close for bar in data[:test_start]])
+
         # Select solely on training data. Stable tie-break favours simpler/faster pair.
         ranked = []
         for fast, slow in eligible:
@@ -147,6 +154,9 @@ def walk_forward(
             profit_ars=profit_ars,
             capital_end_ars=simulated_capital_ars,
             buy_hold_capital_end_ars=buy_hold_capital_ars,
+            market_regime_at_test_start=context["regime"],
+            annualized_volatility_at_test_start_pct=context["annualized_volatility"] * 100,
+            volatility_state_at_test_start=context["volatility_state"],
         ))
         fold_no += 1
         test_start += step
@@ -155,6 +165,19 @@ def walk_forward(
         raise ValueError("Not enough rows for one complete train + test fold")
 
     returns = [f.test_return_pct for f in folds]
+    regime_groups = {}
+    for fold in folds:
+        key = f"{fold.market_regime_at_test_start} / volatilidad {fold.volatility_state_at_test_start}"
+        regime_groups.setdefault(key, []).append(fold)
+    regime_diagnostics = {
+        key: {
+            "folds": len(items),
+            "average_test_return_pct": sum(item.test_return_pct for item in items) / len(items),
+            "positive_folds": sum(item.test_return_pct > 0 for item in items),
+            "average_drawdown_pct": sum(item.test_drawdown_pct for item in items) / len(items),
+        }
+        for key, items in sorted(regime_groups.items())
+    }
     # Aggregate outcomes by the SMA pair selected in training. This is
     # descriptive feedback only; it never changes parameters using test data.
     pair_performance = {}
@@ -206,6 +229,7 @@ def walk_forward(
         "losing_folds": sum(f.test_return_pct < 0 for f in folds),
         "loss_lessons": loss_lessons,
         "pair_diagnostics": pair_diagnostics,
+        "regime_diagnostics": regime_diagnostics,
         "net_profit_ars": simulated_capital_ars - starting_capital_ars,
         "compounded_return_pct": (simulated_capital_ars / starting_capital_ars - 1) * 100,
         "worst_test_return_pct": min(returns),
