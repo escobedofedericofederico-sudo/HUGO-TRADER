@@ -88,6 +88,9 @@ if __name__ == "__main__":
 
 
 class ResearchLabTests(unittest.TestCase):
+    def make_bars(self, prices):
+        return [Bar(str(i), price) for i, price in enumerate(prices)]
+
     def test_walk_forward_charges_terminal_exit_fee_to_open_strategy(self):
         from research_lab import _charge_terminal_liquidation
         bars = [Bar(str(i), price) for i, price in enumerate([10, 11, 12, 13, 14, 15, 16, 17])]
@@ -114,6 +117,8 @@ class ResearchLabTests(unittest.TestCase):
         )
         self.assertGreaterEqual(report["fold_count"], 3)
         self.assertEqual(len(report["folds"]), report["fold_count"])
+        self.assertIn("pair_diagnostics", report)
+        self.assertTrue(report["loss_lessons"])
         self.assertIn("median_test_return_pct", report)
         self.assertIn("test_return_std_pct", report)
         self.assertIn("longest_losing_streak", report)
