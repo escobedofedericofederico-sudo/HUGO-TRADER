@@ -8,11 +8,12 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 import statistics
 from dataclasses import asdict, dataclass
 from typing import Iterable
 
-from bot import Bar, backtest, load_bars
+from bot import Bar, backtest, liquidate_at_close, load_bars
 
 
 @dataclass(frozen=True)
@@ -45,11 +46,14 @@ def _score(result: dict) -> float:
     return float(result["return_pct"]) - 0.5 * abs(float(result["max_drawdown_pct"]))
 
 
+def _liquidated_result(result: dict, bars: list[Bar], fee: float) -> dict:
+    """Apply the same terminal fee to return and drawdown metrics."""
+    return liquidate_at_close(result, bars, fee)
+
+
 def _liquidated_return(result: dict, bars: list[Bar], fee: float) -> float:
-    final_value = float(result["final_value"])
-    units = float(result["open_units"])
-    final_value -= units * bars[-1].close * fee
-    return (final_value / float(result["initial_cash"]) - 1.0) * 100.0
+    """Compatibility helper returning the flat-at-close net percentage."""
+    return float(_liquidated_result(result, bars, fee)["return_pct"])
 
 
 def run_experiments(
@@ -73,12 +77,15 @@ def run_experiments(
         raise ValueError("Parámetros de capital, comisión o min_trades inválidos")
     if any(c.fast < 1 or c.slow <= c.fast for c in configs):
         raise ValueError("Cada candidato requiere 1 <= fast < slow")
-    if any(c.stop_loss is not None and not 0 < c.stop_loss < 1 for c in configs):
-        raise ValueError("stop_loss debe estar entre 0 y 1")
-    if any(not 0 < c.risk_per_trade <= 1 for c in configs):
-        raise ValueError("risk_per_trade debe estar en (0, 1]")
-    if any(bar.close <= 0 for bar in data):
-        raise ValueError("Todos los precios deben ser positivos")
+    if any(c.stop_loss is not None and (
+        not math.isfinite(c.stop_loss) or not 0 < c.stop_loss < 1
+    ) for c in configs):
+        raise ValueError("stop_loss debe ser finito y estar entre 0 y 1")
+    if any(not math.isfinite(c.risk_per_trade) or not 0 < c.risk_per_trade <= 1
+           for c in configs):
+        raise ValueError("risk_per_trade debe ser finito y estar en (0, 1]")
+    if any(not math.isfinite(bar.close) or bar.close <= 0 for bar in data):
+        raise ValueError("Todos los precios deben ser finitos y positivos")
 
     eligible = tuple(c for c in configs if c.slow + 1 <= test_size)
     if not eligible:
@@ -97,6 +104,7 @@ def run_experiments(
                 stop_loss=candidate.stop_loss,
                 risk_per_trade=candidate.risk_per_trade,
             )
+            result = _liquidated_result(result, train, fee_rate)
             if result["closed_trades"] >= min_trades:
                 ranked.append((_score(result), candidate.name, candidate, result))
         if not ranked:
@@ -113,7 +121,8 @@ def run_experiments(
                 stop_loss=selected.stop_loss,
                 risk_per_trade=selected.risk_per_trade,
             )
-            test_return = _liquidated_return(test_result, test, fee_rate)
+            test_result = _liquidated_result(test_result, test, fee_rate)
+            test_return = float(test_result["return_pct"])
             test_dd = float(test_result["max_drawdown_pct"])
             test_trades = int(test_result["closed_trades"])
             training_score = _score(train_result)

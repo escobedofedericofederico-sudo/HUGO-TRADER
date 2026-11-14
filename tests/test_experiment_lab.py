@@ -1,7 +1,7 @@
 import unittest
 
-from bot import Bar
-from experiment_lab import Candidate, run_experiments
+from bot import Bar, backtest
+from experiment_lab import Candidate, _liquidated_result, run_experiments
 
 
 class ExperimentLabTests(unittest.TestCase):
@@ -17,6 +17,16 @@ class ExperimentLabTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             run_experiments(bars, [Candidate(10, 50, None, 1.0)],
                             train_size=55, test_size=20)
+
+    def test_terminal_fee_is_included_in_test_drawdown(self):
+        bars = [Bar(str(i), price) for i, price in enumerate(
+            [10, 11, 12, 13, 14, 15, 16, 17]
+        )]
+        result = backtest(bars, fast=2, slow=3, initial_cash=1000, fee_rate=0.01)
+        adjusted = _liquidated_result(result, bars, 0.01)
+        self.assertLess(adjusted["return_pct"], result["return_pct"])
+        self.assertLess(adjusted["max_drawdown_pct"], 0.0)
+        self.assertEqual(adjusted["open_units"], 0.0)
 
     def test_runs_unseen_folds_without_enabling_deployment(self):
         bars = [Bar(f"2025-{(i // 28) + 1:02d}-{(i % 28) + 1:02d}",

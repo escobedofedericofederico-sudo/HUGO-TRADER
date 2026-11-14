@@ -65,6 +65,11 @@ python bot.py prices.csv --memory-db data/hugo_memory.sqlite3
 python bot.py prices.csv --no-memory
 ```
 
+The `--risk` argument has two modes: with `--stop-loss`, it is the fraction of
+equity budgeted to lose if the stop is reached (position notional is sized from
+that budget); without a stop, it only caps the cash allocation and does not cap
+the loss on a price gap.
+
 The memory labels outcomes by net P&L after simulated fees:
 - **LOSS**: negative realized P&L; records the exit reason and a review lesson.
 - **WIN**: positive realized P&L; records what happened without assuming it will repeat.
@@ -91,6 +96,15 @@ python -m unittest discover -s tests -v
 ## Safety
 
 This is an educational simulator, not investment advice or a promise of returns. Backtests do not guarantee future performance. Never commit API keys, passwords or broker credentials. Live trading is not implemented.
+
+### MetaTrader 4 integration status
+
+The current repository is a Python research and backtesting engine. It does **not**
+contain a compiled MQL4 Expert Advisor, a broker bridge, or a verified MetaTrader 4
+connection. No demo order has been placed or verified. Do not treat the Python
+backtester as an MT4-connected bot. Any future EA must be compiled in MetaEditor,
+checked in Strategy Tester, and then tested only on a demo account with a hard
+demo-account guard. This repository has no real-money execution path.
 
 
 ## Walk-forward research lab (out-of-sample)
