@@ -114,6 +114,10 @@ class ResearchLabTests(unittest.TestCase):
         )
         self.assertGreaterEqual(report["fold_count"], 3)
         self.assertEqual(len(report["folds"]), report["fold_count"])
+        self.assertIn("median_test_return_pct", report)
+        self.assertIn("test_return_std_pct", report)
+        self.assertIn("longest_losing_streak", report)
+        self.assertIn("edge_positive_rate_pct", report)
         for fold in report["folds"]:
             self.assertLess(int(fold["train_end"]), int(fold["test_start"]))
             self.assertIn((fold["selected_fast"], fold["selected_slow"]), ((2, 5), (3, 8)))
@@ -156,3 +160,10 @@ class ResearchLabTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             walk_forward([Bar(str(i), 100 + i) for i in range(80)],
                          candidates=((5, 5),), train_size=40, test_size=20)
+
+
+class RobustnessMetricTests(unittest.TestCase):
+    def test_longest_losing_streak(self):
+        from research_lab import _longest_streak
+        self.assertEqual(_longest_streak([False, True, True, False, True]), 2)
+        self.assertEqual(_longest_streak([False, False]), 0)
