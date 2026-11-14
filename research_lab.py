@@ -6,6 +6,7 @@ that selected pair on the immediately following, unseen test window.
 from __future__ import annotations
 
 import argparse
+import statistics
 from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Iterable
@@ -64,6 +65,15 @@ def _charge_terminal_liquidation(result: dict, bars: list[Bar], fee_rate: float)
                 worst = min(worst, (value / peak - 1.0) * 100.0)
         adjusted["max_drawdown_pct"] = worst
     return adjusted
+
+
+def _longest_streak(flags: list[bool]) -> int:
+    """Return the longest consecutive run of True values."""
+    best = current = 0
+    for flag in flags:
+        current = current + 1 if flag else 0
+        best = max(best, current)
+    return best
 
 
 def walk_forward(
@@ -168,6 +178,11 @@ def walk_forward(
         "net_profit_ars": simulated_capital_ars - starting_capital_ars,
         "compounded_return_pct": (simulated_capital_ars / starting_capital_ars - 1) * 100,
         "worst_test_return_pct": min(returns),
+        "median_test_return_pct": statistics.median(returns),
+        "test_return_std_pct": statistics.pstdev(returns),
+        "longest_losing_streak": _longest_streak([value < 0 for value in returns]),
+        "edge_positive_folds": sum(f.edge_vs_buy_hold_pct > 0 for f in folds),
+        "edge_positive_rate_pct": sum(f.edge_vs_buy_hold_pct > 0 for f in folds) / len(folds) * 100,
         "promotion_candidate": promoted,
         "decision": ("CANDIDATA PARA MÁS VALIDACIÓN" if promoted
                      else "NO PROMOCIONAR: evidencia insuficiente o resultados débiles"),
