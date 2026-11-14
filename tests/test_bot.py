@@ -1,6 +1,9 @@
+import os
+import tempfile
 import unittest
 
-from bot import Bar, backtest, moving_average
+from bot import Bar, Trade, backtest, moving_average
+from experience import learning_report, record_backtest
 
 
 class BotTests(unittest.TestCase):
@@ -27,16 +30,14 @@ class BotTests(unittest.TestCase):
     def test_stop_loss_closes_position(self):
         prices = [10, 9, 8, 9, 10, 11, 12, 10, 8, 7, 6]
         result = backtest(self.make_bars(prices), fast=2, slow=3,
-                          initial_cash=1000, fee_rate=0,
-                          stop_loss=0.05)
+                          initial_cash=1000, fee_rate=0, stop_loss=0.05)
         sells = [trade for trade in result["trades"] if trade.action == "SELL"]
         self.assertTrue(any(trade.reason == "stop_loss" for trade in sells))
 
     def test_take_profit_closes_position(self):
         prices = [10, 9, 8, 9, 10, 11, 12, 13, 14]
         result = backtest(self.make_bars(prices), fast=2, slow=3,
-                          initial_cash=1000, fee_rate=0,
-                          take_profit=0.10)
+                          initial_cash=1000, fee_rate=0, take_profit=0.10)
         sells = [trade for trade in result["trades"] if trade.action == "SELL"]
         self.assertTrue(any(trade.reason == "take_profit" for trade in sells))
 
@@ -50,6 +51,36 @@ class BotTests(unittest.TestCase):
     def test_invalid_stop_loss(self):
         with self.assertRaises(ValueError):
             backtest(self.make_bars([10] * 8), fast=2, slow=3, stop_loss=1)
+
+    def test_memory_remembers_loss_and_prevents_duplicate(self):
+        with tempfile.TemporaryDirectory() as directory:
+            db = os.path.join(directory, "memory.sqlite3")
+            trades = [Trade("day1", "BUY", 100, 0),
+                      Trade("day2", "SELL", 90, 0, -10, "stop_loss")]
+            result = {"initial_cash": 1000, "final_value": 990,
+                      "return_pct": -1, "max_drawdown_pct": -1,
+                      "closed_trades": 1}
+            first = record_backtest(trades, "SMA 2/5", result, db)
+            second = record_backtest(trades, "SMA 2/5", result, db)
+            report = learning_report(db)
+            self.assertEqual(first["new_trades_saved"], 1)
+            self.assertEqual(second["new_trades_saved"], 0)
+            self.assertEqual(report["losses"], 1)
+            self.assertEqual(report["total_trades"], 1)
+            self.assertEqual(report["worst_trades"][0]["exit_reason"], "stop_loss")
+
+    def test_memory_identifies_repeated_loss_pattern(self):
+        with tempfile.TemporaryDirectory() as directory:
+            db = os.path.join(directory, "memory.sqlite3")
+            for i in range(5):
+                trades = [Trade(f"entry{i}", "BUY", 100, 0),
+                          Trade(f"exit{i}", "SELL", 90, 0, -10, "stop_loss")]
+                result = {"initial_cash": 1000, "final_value": 990,
+                          "return_pct": -1, "max_drawdown_pct": -1,
+                          "closed_trades": 1}
+                record_backtest(trades, "SMA 2/5", result, db)
+            report = learning_report(db)
+            self.assertTrue(any("stop_loss" in lesson for lesson in report["lessons"]))
 
 
 if __name__ == "__main__":
