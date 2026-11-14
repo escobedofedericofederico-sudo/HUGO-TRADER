@@ -88,6 +88,17 @@ if __name__ == "__main__":
 
 
 class ResearchLabTests(unittest.TestCase):
+    def test_walk_forward_charges_terminal_exit_fee_to_open_strategy(self):
+        from research_lab import _charge_terminal_liquidation
+        bars = self.make_bars([10, 11, 12, 13, 14, 15, 16, 17])
+        result = backtest(bars, fast=2, slow=3, initial_cash=1000, fee_rate=0.01)
+        self.assertGreater(result["open_units"], 0)
+        adjusted = _charge_terminal_liquidation(result, bars, 0.01)
+        expected_fee = result["open_units"] * bars[-1].close * 0.01
+        self.assertAlmostEqual(adjusted["terminal_liquidation_fee"], expected_fee)
+        self.assertAlmostEqual(adjusted["final_value"], result["final_value"] - expected_fee)
+        self.assertLess(adjusted["return_pct"], result["return_pct"])
+
     def test_walk_forward_uses_multiple_unseen_test_folds(self):
         from research_lab import walk_forward
         prices = []
