@@ -4,4 +4,6 @@ __pycache__/
 venv/
 .env
 *.csv
+*.sqlite3
+*.db
 .DS_Store
