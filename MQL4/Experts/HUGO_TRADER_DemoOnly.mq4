@@ -160,10 +160,12 @@ bool OpenDemoBuy()
    }
 
    int stopLevel = (int)MarketInfo(Symbol(), MODE_STOPLEVEL);
-   if(StopLossPoints < stopLevel ||
-      (TakeProfitPoints > 0 && TakeProfitPoints < stopLevel))
+   double stopDistanceFromBid = StopLossPoints - spreadPoints;
+   double takeProfitDistanceFromBid = TakeProfitPoints + spreadPoints;
+   if(stopDistanceFromBid <= 0.0 || stopDistanceFromBid < stopLevel ||
+      (TakeProfitPoints > 0 && takeProfitDistanceFromBid < stopLevel))
    {
-      Print("HUGO-TRADER: stop distance is below the broker stop level.");
+      Print("HUGO-TRADER: stop distance is below the broker stop level after spread.");
       return(false);
    }
 
