@@ -99,12 +99,45 @@ This is an educational simulator, not investment advice or a promise of returns.
 
 ### MetaTrader 4 integration status
 
-The current repository is a Python research and backtesting engine. It does **not**
-contain a compiled MQL4 Expert Advisor, a broker bridge, or a verified MetaTrader 4
-connection. No demo order has been placed or verified. Do not treat the Python
-backtester as an MT4-connected bot. Any future EA must be compiled in MetaEditor,
-checked in Strategy Tester, and then tested only on a demo account with a hard
-demo-account guard. This repository has no real-money execution path.
+The repository now includes an initial MQL4 source file at
+`MQL4/Experts/HUGO_TRADER_DemoOnly.mq4`. It is a long-only SMA crossover EA
+with one position per symbol/magic number, a mandatory stop-loss, a maximum
+configured risk of 1% of balance, spread and margin checks, and position sizing
+that rounds down (it refuses to force the broker minimum lot when that would
+exceed the risk budget).
+
+**Fail-closed safeguards in the EA:**
+- `EnableDemoTrading` defaults to `false`; no order is sent until explicitly enabled.
+- Initialization rejects accounts that are neither demo nor Strategy Tester.
+- `OnTick`, `OrderSend`, and `OrderClose` each check the demo/tester gate and
+  the explicit enable switch.
+- Strategy Tester is allowed because its trades are simulated; outside the tester,
+  only an account for which MT4 reports `IsDemo()` is accepted.
+- No credentials, API keys, or broker passwords are used or stored.
+
+**Important verification limit:** the MQL4 file is source code only. It has not
+been compiled in MetaEditor, run in Strategy Tester, or connected to a demo
+account from this environment. The Python tests include source-level safety
+regression checks, but those checks are not a substitute for an MQL4 compiler
+or a platform test. No demo order has been placed or verified.
+
+### Compile and test the EA safely
+
+1. In MT4, open **File → Open Data Folder**.
+2. Copy `MQL4/Experts/HUGO_TRADER_DemoOnly.mq4` into the terminal's
+   `MQL4/Experts` folder.
+3. Open MetaEditor, open the file, and compile it. Resolve any compiler errors
+   before proceeding; no compiled `.ex4` file is included in this repository.
+4. Run Strategy Tester on historical data first. Set `EnableDemoTrading=true`
+   only for the tester run; tester orders are simulated.
+5. For a live-terminal test, log in to a **demo account only**, attach the EA,
+   and explicitly set `EnableDemoTrading=true`. If MT4 reports a real account,
+   initialization is rejected and order functions remain blocked.
+
+Do not attach this EA to a real account or use real funds. Stop-loss sizing is
+an estimate: gaps, slippage, tick-value changes, broker execution rules and
+market outages can make actual losses exceed the configured risk. This EA is
+an educational prototype, not investment advice or a proven profitable system.
 
 
 ## Walk-forward research lab (out-of-sample)
