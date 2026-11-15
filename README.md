@@ -1,6 +1,6 @@
 # HUGO-TRADER
 
-Educational quantitative-research project. **Paper backtesting only**: no broker connection, API keys, or real order execution.
+Educational quantitative-research project. The Python engine is **paper-backtesting only**. The optional MQL4 EA is source-only, demo/tester-gated and disabled by default; no broker connection or demo execution has been verified. The EA is not intended to execute real-account orders.
 
 ## Features
 
@@ -130,7 +130,7 @@ or a platform test. No demo order has been placed or verified.
    before proceeding; no compiled `.ex4` file is included in this repository.
 4. Run Strategy Tester on historical data first. Set `EnableDemoTrading=true`
    only for the tester run; tester orders are simulated.
-5. For a live-terminal test, log in to a **demo account only**, attach the EA,
+5. For a terminal demo test, log in to a **demo account only**, attach the EA,
    and explicitly set `EnableDemoTrading=true`. If MT4 reports a real account,
    initialization is rejected and order functions remain blocked.
 
