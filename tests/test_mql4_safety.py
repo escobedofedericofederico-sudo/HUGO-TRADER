@@ -80,6 +80,11 @@ class Mql4SafetySourceTests(unittest.TestCase):
         self.assertIn("if(lots < minLot)", body)
         self.assertIn("return(0.0);", body)
 
+    def test_broker_stop_level_validation_accounts_for_spread(self):
+        body = function_body(self.source, "OpenDemoBuy")
+        self.assertIn("StopLossPoints - spreadPoints", body)
+        self.assertIn("stopDistanceFromBid < stopLevel", body)
+
 
 if __name__ == "__main__":
     unittest.main()
