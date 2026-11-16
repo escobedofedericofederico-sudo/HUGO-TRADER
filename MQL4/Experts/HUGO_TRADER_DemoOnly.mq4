@@ -9,7 +9,8 @@
 input bool   EnableDemoTrading = false; // Explicit opt-in; safe mode by default
 input int    FastMAPeriod      = 5;
 input int    SlowMAPeriod      = 20;
-input double RiskPercent       = 0.5;   // Percent of balance at the stop; max 1%
+input double RiskPercent       = 0.5;   // Percent of current equity at the stop; max 1%
+input double EstimatedRoundTurnCommissionPerLot = 0.0; // Account currency per lot, entry + exit
 input int    StopLossPoints    = 300;   // Mandatory protective stop
 input int    TakeProfitPoints  = 600;   // 0 disables take-profit
 input int    MaxSpreadPoints   = 30;
@@ -35,7 +36,8 @@ int OnInit()
 
    if(RiskPercent <= 0.0 || RiskPercent > 1.0 ||
       StopLossPoints <= 0 || TakeProfitPoints < 0 ||
-      MaxSpreadPoints <= 0 || SlippagePoints < 0)
+      MaxSpreadPoints <= 0 || SlippagePoints < 0 ||
+      EstimatedRoundTurnCommissionPerLot < 0.0)
    {
       Print("HUGO-TRADER: invalid risk or execution parameters.");
       return(INIT_PARAMETERS_INCORRECT);
@@ -99,12 +101,32 @@ bool FindOpenBuy(int &ticket)
    return(false);
 }
 
+bool HasOpenPosition()
+{
+   // Block duplicate entries even if another EA/order uses a sell with this magic.
+   for(int i = OrdersTotal() - 1; i >= 0; i--)
+   {
+      if(!OrderSelect(i, SELECT_BY_POS, MODE_TRADES))
+         continue;
+
+      if(OrderSymbol() == Symbol() &&
+         OrderMagicNumber() == MagicNumber &&
+         (OrderType() == OP_BUY || OrderType() == OP_SELL))
+         return(true);
+   }
+
+   return(false);
+}
+
 int LotDigitsFromStep(double step)
 {
-   if(step >= 0.1)   return(1);
-   if(step >= 0.01)  return(2);
-   if(step >= 0.001) return(3);
-   return(4);
+   // Support non-power-of-ten steps such as 0.25 as well as 0.01 or 0.001.
+   for(int digits = 0; digits <= 8; digits++)
+   {
+      if(MathAbs(step - NormalizeDouble(step, digits)) < 1e-8)
+         return(digits);
+   }
+   return(8);
 }
 
 double CalculateLots(double spreadPoints)
@@ -120,12 +142,15 @@ double CalculateLots(double spreadPoints)
       return(0.0);
 
    // Include spread in the estimated loss from Ask entry to Bid stop.
-   double stopDistancePoints = StopLossPoints + spreadPoints;
-   double estimatedLossPerLot = (stopDistancePoints / tickSizePoints) * tickValue;
+   // Reserve for the entry spread and slippage on both entry and stop execution.
+   // Add the broker's estimated round-turn commission when the user supplies it.
+   double stopDistancePoints = StopLossPoints + spreadPoints + 2.0 * SlippagePoints;
+   double estimatedLossPerLot = (stopDistancePoints / tickSizePoints) * tickValue
+                                + EstimatedRoundTurnCommissionPerLot;
    if(estimatedLossPerLot <= 0.0)
       return(0.0);
 
-   double riskMoney = AccountBalance() * (RiskPercent / 100.0);
+   double riskMoney = AccountEquity() * (RiskPercent / 100.0);
    double rawLots   = riskMoney / estimatedLossPerLot;
 
    // Round down only. Never force the broker minimum if it would exceed risk.
@@ -257,6 +282,12 @@ void OnTick()
    {
       if(CrossedBelow())
          CloseDemoBuy(ticket);
+      return;
+   }
+
+   if(HasOpenPosition())
+   {
+      Print("HUGO-TRADER: existing market position with this symbol/magic; new entry blocked.");
       return;
    }
 
