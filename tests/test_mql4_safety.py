@@ -80,6 +80,31 @@ class Mql4SafetySourceTests(unittest.TestCase):
         self.assertIn("if(lots < minLot)", body)
         self.assertIn("return(0.0);", body)
 
+    def test_risk_budget_uses_current_equity(self):
+        body = function_body(self.source, "CalculateLots")
+        self.assertIn("AccountEquity()", body)
+
+    def test_risk_estimate_reserves_spread_slippage_and_commission(self):
+        body = function_body(self.source, "CalculateLots")
+        self.assertIn("StopLossPoints + spreadPoints + 2.0 * SlippagePoints", body)
+        self.assertIn("+ EstimatedRoundTurnCommissionPerLot", body)
+
+    def test_negative_commission_estimate_is_rejected(self):
+        body = function_body(self.source, "OnInit")
+        self.assertIn("EstimatedRoundTurnCommissionPerLot < 0.0", body)
+
+    def test_lot_step_precision_handles_fractional_steps(self):
+        body = function_body(self.source, "LotDigitsFromStep")
+        self.assertIn("NormalizeDouble(step, digits)", body)
+        self.assertIn("MathAbs", body)
+
+    def test_existing_buy_or_sell_position_blocks_duplicate_entry(self):
+        body = function_body(self.source, "HasOpenPosition")
+        self.assertIn("OrderType() == OP_BUY", body)
+        self.assertIn("OrderType() == OP_SELL", body)
+        tick = function_body(self.source, "OnTick")
+        self.assertIn("if(HasOpenPosition())", tick)
+
     def test_broker_stop_level_validation_accounts_for_spread(self):
         body = function_body(self.source, "OpenDemoBuy")
         self.assertIn("StopLossPoints - spreadPoints", body)
