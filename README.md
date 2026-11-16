@@ -101,13 +101,21 @@ This is an educational simulator, not investment advice or a promise of returns.
 
 The repository now includes an initial MQL4 source file at
 `MQL4/Experts/HUGO_TRADER_DemoOnly.mq4`. It is a long-only SMA crossover EA
-with one position per symbol/magic number, a mandatory stop-loss, a maximum
-configured risk of 1% of balance, spread and margin checks, and position sizing
+with one market position per symbol/magic number, a mandatory stop-loss, a maximum
+configured risk of 1% of current equity, spread and margin checks, and position sizing
 that rounds down (it refuses to force the broker minimum lot when that would
-exceed the risk budget).
+exceed the risk budget). The risk estimate also reserves the configured slippage
+on entry and stop execution, and can include an estimated round-turn commission.
 
 **Fail-closed safeguards in the EA:**
 - `EnableDemoTrading` defaults to `false`; no order is sent until explicitly enabled.
+- Position sizing uses current equity, includes spread plus a two-sided slippage reserve,
+  and adds `EstimatedRoundTurnCommissionPerLot` when configured. Set that input to the
+  broker's estimated entry-plus-exit commission per lot in the account currency; the
+  default `0.0` means commission is not included in the risk estimate.
+- Lot precision is derived from the broker's lot step, including fractional steps such
+  as `0.25`; the EA rounds down and refuses a size below the broker minimum.
+- A same-symbol/same-magic BUY or SELL market position blocks a new entry.
 - Initialization rejects accounts that are neither demo nor Strategy Tester.
 - `OnTick`, `OrderSend`, and `OrderClose` each check the demo/tester gate and
   the explicit enable switch.
