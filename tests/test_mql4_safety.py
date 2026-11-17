@@ -110,6 +110,44 @@ class Mql4SafetySourceTests(unittest.TestCase):
         self.assertIn("StopLossPoints - spreadPoints", body)
         self.assertIn("stopDistanceFromBid < stopLevel", body)
 
+    def test_successful_entry_verifies_the_broker_kept_a_protective_stop(self):
+        verify = function_body(self.source, "ProtectiveStopIsValid")
+        self.assertIn("OrderStopLoss()", verify)
+        self.assertIn("OrderOpenPrice()", verify)
+        self.assertIn("OrderCloseTime() != 0", verify)
+        self.assertIn(
+            "actualStopPoints <= StopLossPoints + SlippagePoints + 0.5",
+            verify,
+        )
+
+        open_body = function_body(self.source, "OpenDemoBuy")
+        self.assertIn("if(!ProtectiveStopIsValid(orderTicket))", open_body)
+        self.assertIn("CloseUnprotectedPosition(orderTicket)", open_body)
+
+    def test_emergency_close_is_demo_gated_and_limited_to_our_open_buy(self):
+        body = function_body(self.source, "CloseUnprotectedPosition")
+        self.assertIn(
+            "if(!TradingEnvironmentAllowed() || !EnableDemoTrading)",
+            body,
+        )
+        self.assertIn("OrderCloseTime() != 0", body)
+        self.assertIn("OrderSymbol() != Symbol()", body)
+        self.assertIn("OrderMagicNumber() != MagicNumber", body)
+        self.assertIn("OrderType() != OP_BUY", body)
+        self.assertIn("OrderClose(", body)
+        self.assertIn("Manual terminal check required", body)
+
+    def test_no_unreviewed_order_mutation_or_pending_order_api_is_used(self):
+        forbidden = (
+            "OrderModify(",
+            "OrderDelete(",
+            "OrderCloseBy(",
+            "OrderSendAsync(",
+        )
+        for operation in forbidden:
+            with self.subTest(operation=operation):
+                self.assertNotIn(operation, self.source)
+
 
 if __name__ == "__main__":
     unittest.main()

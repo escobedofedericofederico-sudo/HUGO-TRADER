@@ -164,6 +164,55 @@ double CalculateLots(double spreadPoints)
    return(NormalizeDouble(lots, LotDigitsFromStep(lotStep)));
 }
 
+bool ProtectiveStopIsValid(int ticket)
+{
+   if(!OrderSelect(ticket, SELECT_BY_TICKET))
+      return(false);
+
+   if(OrderCloseTime() != 0 ||
+      OrderSymbol() != Symbol() ||
+      OrderMagicNumber() != MagicNumber ||
+      OrderType() != OP_BUY)
+      return(false);
+
+   double stopLoss = OrderStopLoss();
+   if(stopLoss <= 0.0 || stopLoss >= OrderOpenPrice())
+      return(false);
+
+   // Allow only the configured entry-slippage reserve beyond the requested stop.
+   double actualStopPoints = (OrderOpenPrice() - stopLoss) / Point;
+   return(actualStopPoints <= StopLossPoints + SlippagePoints + 0.5);
+}
+
+bool CloseUnprotectedPosition(int ticket)
+{
+   if(!TradingEnvironmentAllowed() || !EnableDemoTrading)
+      return(false);
+
+   if(!IsTradeAllowed() || !OrderSelect(ticket, SELECT_BY_TICKET))
+      return(false);
+
+   if(OrderCloseTime() != 0 ||
+      OrderSymbol() != Symbol() ||
+      OrderMagicNumber() != MagicNumber ||
+      OrderType() != OP_BUY)
+      return(false);
+
+   RefreshRates();
+   ResetLastError();
+
+   bool closed = OrderClose(ticket, OrderLots(), Bid, SlippagePoints, clrRed);
+   if(!closed)
+   {
+      int errorCode = GetLastError();
+      Print("HUGO-TRADER CRITICAL: emergency close failed. Manual terminal check required. Error=", errorCode);
+      return(false);
+   }
+
+   Print("HUGO-TRADER: position without a valid protective stop was immediately closed. Ticket=", ticket);
+   return(true);
+}
+
 bool OpenDemoBuy()
 {
    if(!TradingEnvironmentAllowed() || !EnableDemoTrading)
@@ -227,6 +276,15 @@ bool OpenDemoBuy()
    }
 
    Print("HUGO-TRADER: demo buy opened. Ticket=", orderTicket, " lots=", lots);
+
+   if(!ProtectiveStopIsValid(orderTicket))
+   {
+      Print("HUGO-TRADER CRITICAL: entry has no valid protective stop or its stop distance exceeds the configured slippage reserve. Attempting immediate close.");
+      if(!CloseUnprotectedPosition(orderTicket))
+         Print("HUGO-TRADER CRITICAL: emergency close failed or the order is no longer selectable. Check the MT4 terminal immediately. Ticket=", orderTicket);
+      return(false);
+   }
+
    return(true);
 }
 

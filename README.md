@@ -119,6 +119,12 @@ on entry and stop execution, and can include an estimated round-turn commission.
 - Initialization rejects accounts that are neither demo nor Strategy Tester.
 - `OnTick`, `OrderSend`, and `OrderClose` each check the demo/tester gate and
   the explicit enable switch.
+- After a successful entry, the EA re-selects the broker's order and verifies that
+  a stop-loss is present, is below the BUY open price, and is not farther away than
+  the configured stop plus the slippage reserve. If that check fails, it attempts
+  an immediate demo-only close and prints a critical warning if the close fails.
+  This is a best-effort emergency response, not a guarantee against broker, network,
+  or market failure; the terminal must be checked if the critical warning appears.
 - Strategy Tester is allowed because its trades are simulated; outside the tester,
   only an account for which MT4 reports `IsDemo()` is accepted.
 - No credentials, API keys, or broker passwords are used or stored.
