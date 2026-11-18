@@ -76,7 +76,7 @@ class Mql4SafetySourceTests(unittest.TestCase):
 
     def test_position_size_rounds_down_and_never_forces_minimum_lot(self):
         body = function_body(self.source, "CalculateLots")
-        self.assertIn("MathFloor(rawLots / lotStep", body)
+        self.assertIn("MathFloor(cappedLots / lotStep", body)
         self.assertIn("if(lots < minLot)", body)
         self.assertIn("return(0.0);", body)
 
@@ -147,6 +147,49 @@ class Mql4SafetySourceTests(unittest.TestCase):
         for operation in forbidden:
             with self.subTest(operation=operation):
                 self.assertNotIn(operation, self.source)
+
+    def test_market_quote_guard_rejects_non_finite_or_crossed_quotes(self):
+        body = function_body(self.source, "MarketQuotesAreValid")
+        self.assertIn("MathIsValidNumber(Bid)", body)
+        self.assertIn("MathIsValidNumber(Ask)", body)
+        self.assertIn("MathIsValidNumber(Point)", body)
+        self.assertIn("Ask < Bid", body)
+        self.assertIn("Point <= 0.0", body)
+
+    def test_all_order_paths_check_market_quotes(self):
+        for name in ("OpenDemoBuy", "CloseDemoBuy", "CloseUnprotectedPosition"):
+            with self.subTest(function=name):
+                self.assertIn("MarketQuotesAreValid()", function_body(self.source, name))
+
+    def test_entry_rechecks_for_an_existing_position_before_order_send(self):
+        body = function_body(self.source, "OpenDemoBuy")
+        self.assertIn("if(HasOpenPosition())", body)
+        self.assertLess(body.index("if(HasOpenPosition())"), body.index("OrderSend("))
+
+    def test_margin_check_rejects_non_finite_or_non_positive_result(self):
+        body = function_body(self.source, "OpenDemoBuy")
+        self.assertIn("MathIsValidNumber(freeMarginAfterTrade)", body)
+        self.assertIn("freeMarginAfterTrade <= 0.0", body)
+
+    def test_normal_close_rejects_already_closed_ticket(self):
+        body = function_body(self.source, "CloseDemoBuy")
+        self.assertIn("OrderCloseTime() != 0", body)
+
+    def test_maximum_lot_is_capped_then_rounded_down_to_step(self):
+        body = function_body(self.source, "CalculateLots")
+        self.assertIn("MathMin(rawLots, maxLot)", body)
+        self.assertIn("MathFloor(cappedLots / lotStep", body)
+
+    def test_risk_inputs_must_be_finite(self):
+        body = function_body(self.source, "OnInit")
+        self.assertIn("MathIsValidNumber(RiskPercent)", body)
+        self.assertIn("MathIsValidNumber(EstimatedRoundTurnCommissionPerLot)", body)
+
+    def test_protective_stop_validation_rejects_invalid_prices_and_point(self):
+        body = function_body(self.source, "ProtectiveStopIsValid")
+        self.assertIn("MathIsValidNumber(Point)", body)
+        self.assertIn("MathIsValidNumber(stopLoss)", body)
+        self.assertIn("MathIsValidNumber(openPrice)", body)
 
 
 if __name__ == "__main__":
