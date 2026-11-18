@@ -3,7 +3,7 @@
 //| Educational MA crossover EA. No real-account execution.          |
 //+------------------------------------------------------------------+
 #property strict
-#property version   "0.1.0"
+#property version   "0.1.1"
 #property description "HUGO-TRADER demo-only SMA crossover Expert Advisor"
 
 input bool   EnableDemoTrading = false; // Explicit opt-in; safe mode by default
@@ -34,7 +34,9 @@ int OnInit()
       return(INIT_PARAMETERS_INCORRECT);
    }
 
-   if(RiskPercent <= 0.0 || RiskPercent > 1.0 ||
+   if(!MathIsValidNumber(RiskPercent) ||
+      !MathIsValidNumber(EstimatedRoundTurnCommissionPerLot) ||
+      RiskPercent <= 0.0 || RiskPercent > 1.0 ||
       StopLossPoints <= 0 || TakeProfitPoints < 0 ||
       MaxSpreadPoints <= 0 || SlippagePoints < 0 ||
       EstimatedRoundTurnCommissionPerLot < 0.0)
@@ -58,6 +60,21 @@ int OnInit()
 void OnDeinit(const int reason)
 {
    Comment("");
+}
+
+bool MarketQuotesAreValid()
+{
+   RefreshRates();
+
+   if(!MathIsValidNumber(Bid) || !MathIsValidNumber(Ask) ||
+      !MathIsValidNumber(Point) || Bid <= 0.0 || Ask <= 0.0 ||
+      Point <= 0.0 || Ask < Bid)
+   {
+      Print("HUGO-TRADER: invalid or unavailable market quotes; order operation blocked.");
+      return(false);
+   }
+
+   return(true);
 }
 
 bool CrossedAbove()
@@ -131,14 +148,19 @@ int LotDigitsFromStep(double step)
 
 double CalculateLots(double spreadPoints)
 {
-   double tickValue     = MarketInfo(Symbol(), MODE_TICKVALUE);
+   double tickValue      = MarketInfo(Symbol(), MODE_TICKVALUE);
    double tickSizePoints = MarketInfo(Symbol(), MODE_TICKSIZE);
-   double lotStep       = MarketInfo(Symbol(), MODE_LOTSTEP);
-   double minLot        = MarketInfo(Symbol(), MODE_MINLOT);
-   double maxLot        = MarketInfo(Symbol(), MODE_MAXLOT);
+   double lotStep        = MarketInfo(Symbol(), MODE_LOTSTEP);
+   double minLot         = MarketInfo(Symbol(), MODE_MINLOT);
+   double maxLot         = MarketInfo(Symbol(), MODE_MAXLOT);
+   double equity         = AccountEquity();
 
-   if(tickValue <= 0.0 || tickSizePoints <= 0.0 ||
-      lotStep <= 0.0 || minLot <= 0.0 || maxLot < minLot)
+   if(!MathIsValidNumber(spreadPoints) || spreadPoints < 0.0 ||
+      !MathIsValidNumber(tickValue) || !MathIsValidNumber(tickSizePoints) ||
+      !MathIsValidNumber(lotStep) || !MathIsValidNumber(minLot) ||
+      !MathIsValidNumber(maxLot) || !MathIsValidNumber(equity) ||
+      tickValue <= 0.0 || tickSizePoints <= 0.0 ||
+      lotStep <= 0.0 || minLot <= 0.0 || maxLot < minLot || equity <= 0.0)
       return(0.0);
 
    // Include spread in the estimated loss from Ask entry to Bid stop.
@@ -147,19 +169,22 @@ double CalculateLots(double spreadPoints)
    double stopDistancePoints = StopLossPoints + spreadPoints + 2.0 * SlippagePoints;
    double estimatedLossPerLot = (stopDistancePoints / tickSizePoints) * tickValue
                                 + EstimatedRoundTurnCommissionPerLot;
-   if(estimatedLossPerLot <= 0.0)
+   if(!MathIsValidNumber(estimatedLossPerLot) || estimatedLossPerLot <= 0.0)
       return(0.0);
 
-   double riskMoney = AccountEquity() * (RiskPercent / 100.0);
-   double rawLots   = riskMoney / estimatedLossPerLot;
+   double riskMoney = equity * (RiskPercent / 100.0);
+   if(!MathIsValidNumber(riskMoney) || riskMoney <= 0.0)
+      return(0.0);
 
-   // Round down only. Never force the broker minimum if it would exceed risk.
-   double lots = MathFloor(rawLots / lotStep + 1e-8) * lotStep;
+   double rawLots = riskMoney / estimatedLossPerLot;
+   if(!MathIsValidNumber(rawLots) || rawLots <= 0.0)
+      return(0.0);
+
+   // Cap first, then round down to the broker's step. Never force the minimum lot.
+   double cappedLots = MathMin(rawLots, maxLot);
+   double lots = MathFloor(cappedLots / lotStep + 1e-8) * lotStep;
    if(lots < minLot)
       return(0.0);
-
-   if(lots > maxLot)
-      lots = maxLot;
 
    return(NormalizeDouble(lots, LotDigitsFromStep(lotStep)));
 }
@@ -172,16 +197,20 @@ bool ProtectiveStopIsValid(int ticket)
    if(OrderCloseTime() != 0 ||
       OrderSymbol() != Symbol() ||
       OrderMagicNumber() != MagicNumber ||
-      OrderType() != OP_BUY)
+      OrderType() != OP_BUY ||
+      !MathIsValidNumber(Point) || Point <= 0.0)
       return(false);
 
    double stopLoss = OrderStopLoss();
-   if(stopLoss <= 0.0 || stopLoss >= OrderOpenPrice())
+   double openPrice = OrderOpenPrice();
+   if(!MathIsValidNumber(stopLoss) || !MathIsValidNumber(openPrice) ||
+      stopLoss <= 0.0 || stopLoss >= openPrice)
       return(false);
 
    // Allow only the configured entry-slippage reserve beyond the requested stop.
-   double actualStopPoints = (OrderOpenPrice() - stopLoss) / Point;
-   return(actualStopPoints <= StopLossPoints + SlippagePoints + 0.5);
+   double actualStopPoints = (openPrice - stopLoss) / Point;
+   return(MathIsValidNumber(actualStopPoints) &&
+          actualStopPoints <= StopLossPoints + SlippagePoints + 0.5);
 }
 
 bool CloseUnprotectedPosition(int ticket)
@@ -198,9 +227,10 @@ bool CloseUnprotectedPosition(int ticket)
       OrderType() != OP_BUY)
       return(false);
 
-   RefreshRates();
-   ResetLastError();
+   if(!MarketQuotesAreValid())
+      return(false);
 
+   ResetLastError();
    bool closed = OrderClose(ticket, OrderLots(), Bid, SlippagePoints, clrRed);
    if(!closed)
    {
@@ -224,7 +254,15 @@ bool OpenDemoBuy()
       return(false);
    }
 
-   RefreshRates();
+   // Re-check immediately before sizing/sending to reduce duplicate-entry races.
+   if(HasOpenPosition())
+   {
+      Print("HUGO-TRADER: existing market position detected immediately before entry; order blocked.");
+      return(false);
+   }
+
+   if(!MarketQuotesAreValid())
+      return(false);
 
    double spreadPoints = (Ask - Bid) / Point;
    if(spreadPoints > MaxSpreadPoints)
@@ -250,9 +288,10 @@ bool OpenDemoBuy()
       return(false);
    }
 
-   if(AccountFreeMarginCheck(Symbol(), OP_BUY, lots) <= 0.0)
+   double freeMarginAfterTrade = AccountFreeMarginCheck(Symbol(), OP_BUY, lots);
+   if(!MathIsValidNumber(freeMarginAfterTrade) || freeMarginAfterTrade <= 0.0)
    {
-      Print("HUGO-TRADER: insufficient free margin; entry blocked.");
+      Print("HUGO-TRADER: insufficient or invalid free-margin result; entry blocked.");
       return(false);
    }
 
@@ -296,14 +335,16 @@ bool CloseDemoBuy(int ticket)
    if(!IsTradeAllowed() || !OrderSelect(ticket, SELECT_BY_TICKET))
       return(false);
 
-   if(OrderSymbol() != Symbol() ||
+   if(OrderCloseTime() != 0 ||
+      OrderSymbol() != Symbol() ||
       OrderMagicNumber() != MagicNumber ||
       OrderType() != OP_BUY)
       return(false);
 
-   RefreshRates();
-   ResetLastError();
+   if(!MarketQuotesAreValid())
+      return(false);
 
+   ResetLastError();
    bool closed = OrderClose(ticket, OrderLots(), Bid, SlippagePoints, clrBlue);
    if(!closed)
    {
