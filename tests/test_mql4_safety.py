@@ -192,5 +192,31 @@ class Mql4SafetySourceTests(unittest.TestCase):
         self.assertIn("MathIsValidNumber(openPrice)", body)
 
 
+    def test_protective_stop_must_remain_below_current_bid(self):
+        body = function_body(self.source, "ProtectiveStopIsValid")
+        self.assertIn("MarketQuotesAreValid()", body)
+        self.assertIn("stopLoss < Bid", body)
+
+    def test_open_buy_protection_is_checked_before_the_new_bar_gate(self):
+        monitor = function_body(self.source, "MonitorOpenBuyProtection")
+        self.assertIn("OrdersTotal()", monitor)
+        self.assertIn("OrderSelect(i, SELECT_BY_POS, MODE_TRADES)", monitor)
+        self.assertIn("ProtectiveStopIsValid(ticket)", monitor)
+        self.assertIn("CloseUnprotectedPosition(ticket)", monitor)
+
+        tick = function_body(self.source, "OnTick")
+        self.assertIn("if(!MonitorOpenBuyProtection())", tick)
+        self.assertLess(
+            tick.index("if(!MonitorOpenBuyProtection())"),
+            tick.index("if(Bars < SlowMAPeriod + 3"),
+        )
+
+    def test_protection_monitor_is_scoped_to_this_symbol_magic_and_buy(self):
+        body = function_body(self.source, "MonitorOpenBuyProtection")
+        self.assertIn("OrderSymbol() != Symbol()", body)
+        self.assertIn("OrderMagicNumber() != MagicNumber", body)
+        self.assertIn("OrderType() != OP_BUY", body)
+
+
 if __name__ == "__main__":
     unittest.main()
