@@ -3,7 +3,7 @@
 //| Educational MA crossover EA. No real-account execution.          |
 //+------------------------------------------------------------------+
 #property strict
-#property version   "0.1.1"
+#property version   "0.1.2"
 #property description "HUGO-TRADER demo-only SMA crossover Expert Advisor"
 
 input bool   EnableDemoTrading = false; // Explicit opt-in; safe mode by default
@@ -201,6 +201,11 @@ bool ProtectiveStopIsValid(int ticket)
       !MathIsValidNumber(Point) || Point <= 0.0)
       return(false);
 
+   // A BUY stop must remain below the current Bid. If price has gapped
+   // through it but the order is still open, treat the position as unprotected.
+   if(!MarketQuotesAreValid())
+      return(false);
+
    double stopLoss = OrderStopLoss();
    double openPrice = OrderOpenPrice();
    if(!MathIsValidNumber(stopLoss) || !MathIsValidNumber(openPrice) ||
@@ -210,7 +215,8 @@ bool ProtectiveStopIsValid(int ticket)
    // Allow only the configured entry-slippage reserve beyond the requested stop.
    double actualStopPoints = (openPrice - stopLoss) / Point;
    return(MathIsValidNumber(actualStopPoints) &&
-          actualStopPoints <= StopLossPoints + SlippagePoints + 0.5);
+          actualStopPoints <= StopLossPoints + SlippagePoints + 0.5 &&
+          stopLoss < Bid);
 }
 
 bool CloseUnprotectedPosition(int ticket)
@@ -241,6 +247,35 @@ bool CloseUnprotectedPosition(int ticket)
 
    Print("HUGO-TRADER: position without a valid protective stop was immediately closed. Ticket=", ticket);
    return(true);
+}
+
+bool MonitorOpenBuyProtection()
+{
+   bool allProtected = true;
+
+   // Run on every tick, not just once per candle. A broker-side stop can
+   // disappear or become invalid after the initial post-entry verification.
+   for(int i = OrdersTotal() - 1; i >= 0; i--)
+   {
+      if(!OrderSelect(i, SELECT_BY_POS, MODE_TRADES))
+         continue;
+
+      if(OrderSymbol() != Symbol() ||
+         OrderMagicNumber() != MagicNumber ||
+         OrderType() != OP_BUY)
+         continue;
+
+      int ticket = OrderTicket();
+      if(!ProtectiveStopIsValid(ticket))
+      {
+         allProtected = false;
+         Print("HUGO-TRADER CRITICAL: open BUY no longer has a valid protective stop. Attempting demo-only emergency close. Ticket=", ticket);
+         if(!CloseUnprotectedPosition(ticket))
+            Print("HUGO-TRADER CRITICAL: protection check and emergency close failed. Check the MT4 terminal immediately. Ticket=", ticket);
+      }
+   }
+
+   return(allProtected);
 }
 
 bool OpenDemoBuy()
@@ -370,6 +405,10 @@ void OnTick()
    }
 
    Comment("HUGO-TRADER DEMO ONLY | no real-account execution");
+
+   // Continuously supervise existing BUY protection before the new-bar gate.
+   if(!MonitorOpenBuyProtection())
+      return;
 
    if(Bars < SlowMAPeriod + 3 || Time[0] == g_lastBarTime)
       return;
