@@ -125,6 +125,10 @@ on entry and stop execution, and can include an estimated round-turn commission.
   an immediate demo-only close and prints a critical warning if the close fails.
   This is a best-effort emergency response, not a guarantee against broker, network,
   or market failure; the terminal must be checked if the critical warning appears.
+- On every tick, before the new-candle strategy gate, the EA rechecks each matching open
+  BUY. A missing/invalid stop or a stop at/above current Bid triggers a demo-only
+  emergency-close attempt; failure is logged as critical and requires manual terminal
+  inspection. This remains best-effort and cannot guarantee execution during outages.
 - Strategy Tester is allowed because its trades are simulated; outside the tester,
   only an account for which MT4 reports `IsDemo()` is accepted.
 - No credentials, API keys, or broker passwords are used or stored.
