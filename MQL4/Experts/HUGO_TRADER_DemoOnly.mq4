@@ -18,6 +18,7 @@ input int    SlippagePoints    = 5;
 input int    MagicNumber       = 26111501;
 
 datetime g_lastBarTime = 0;
+int g_lastUnprotectedTicket = -1;
 
 // Strategy Tester is permitted because its orders are simulated.
 // Outside the tester, the EA accepts demo accounts only.
@@ -252,9 +253,10 @@ bool CloseUnprotectedPosition(int ticket)
 bool MonitorOpenBuyProtection()
 {
    bool allProtected = true;
+   int firstUnprotectedTicket = -1;
 
-   // Run on every tick, not just once per candle. A broker-side stop can
-   // disappear or become invalid after the initial post-entry verification.
+   // Run on every tick, including safe mode. Safe mode observes and warns,
+   // but never sends an emergency close order.
    for(int i = OrdersTotal() - 1; i >= 0; i--)
    {
       if(!OrderSelect(i, SELECT_BY_POS, MODE_TRADES))
@@ -269,11 +271,26 @@ bool MonitorOpenBuyProtection()
       if(!ProtectiveStopIsValid(ticket))
       {
          allProtected = false;
-         Print("HUGO-TRADER CRITICAL: open BUY no longer has a valid protective stop. Attempting demo-only emergency close. Ticket=", ticket);
-         if(!CloseUnprotectedPosition(ticket))
-            Print("HUGO-TRADER CRITICAL: protection check and emergency close failed. Check the MT4 terminal immediately. Ticket=", ticket);
+         if(firstUnprotectedTicket < 0)
+            firstUnprotectedTicket = ticket;
+
+         if(ticket != g_lastUnprotectedTicket)
+         {
+            if(EnableDemoTrading)
+               Print("HUGO-TRADER CRITICAL: open BUY protection is invalid or could not be verified. Attempting demo-only emergency close. Ticket=", ticket);
+            else
+               Print("HUGO-TRADER WARNING: open BUY protection is invalid or could not be verified. Safe mode is active; no automatic close will be sent. Check the MT4 terminal. Ticket=", ticket);
+         }
+
+         if(EnableDemoTrading && !CloseUnprotectedPosition(ticket))
+            Print("HUGO-TRADER CRITICAL: emergency close failed. Check the MT4 terminal immediately. Ticket=", ticket);
       }
    }
+
+   if(allProtected)
+      g_lastUnprotectedTicket = -1;
+   else
+      g_lastUnprotectedTicket = firstUnprotectedTicket;
 
    return(allProtected);
 }
@@ -398,17 +415,21 @@ void OnTick()
       return;
    }
 
-   if(!EnableDemoTrading)
+   Comment("HUGO-TRADER DEMO ONLY | no real-account execution");
+
+   // Protection remains observable in safe mode, but safe mode never closes orders.
+   if(!MonitorOpenBuyProtection())
    {
-      Comment("HUGO-TRADER SAFE MODE: set EnableDemoTrading=true only on a demo account.");
+      if(!EnableDemoTrading)
+         Comment("HUGO-TRADER SAFE MODE WARNING: open BUY protection is invalid or unverified; check the MT4 terminal.");
       return;
    }
 
-   Comment("HUGO-TRADER DEMO ONLY | no real-account execution");
-
-   // Continuously supervise existing BUY protection before the new-bar gate.
-   if(!MonitorOpenBuyProtection())
+   if(!EnableDemoTrading)
+   {
+      Comment("HUGO-TRADER SAFE MODE: entries disabled; open BUY protection monitored read-only.");
       return;
+   }
 
    if(Bars < SlowMAPeriod + 3 || Time[0] == g_lastBarTime)
       return;
