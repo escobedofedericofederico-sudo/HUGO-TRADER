@@ -26,6 +26,7 @@ Do not attach it to a real account. Do not change the guards to make a real acco
 - Quotes, point size, symbol tick values, equity, calculated risk, and free-margin results must be finite and positive where required. Crossed or unavailable quotes block order operations.
 - After entry, the EA re-selects the order and checks that a protective stop exists below the BUY open price and is not farther away than the configured stop plus the slippage reserve. If not, it attempts a demo-only emergency close and logs a critical warning if the close fails.
 - On every tick, before the new-bar strategy gate, it rechecks each matching open BUY. A missing/invalid stop or a stop at/above current Bid triggers a demo-only emergency-close attempt. A failed close is logged as critical and requires manual terminal inspection.
+- The protection check also runs when `EnableDemoTrading=false`. In that safe mode it is read-only: it warns if protection is invalid or cannot be verified, but it never sends an emergency close or a new entry.
 - This emergency close is best effort. Broker rejection, connection loss, market gaps, or execution outages can prevent a close.
 
 These checks reduce known risks; they do not guarantee that actual loss cannot exceed the estimate. Tick value, spread, slippage, commission, and broker execution rules can change.
