@@ -217,6 +217,20 @@ class Mql4SafetySourceTests(unittest.TestCase):
         self.assertIn("OrderMagicNumber() != MagicNumber", body)
         self.assertIn("OrderType() != OP_BUY", body)
 
+    def test_protection_monitor_runs_even_when_entry_trading_is_disabled(self):
+        tick = function_body(self.source, "OnTick")
+        monitor_index = tick.index("if(!MonitorOpenBuyProtection())")
+        safe_mode_index = tick.index("if(!EnableDemoTrading)")
+        self.assertLess(monitor_index, safe_mode_index)
+
+    def test_safe_mode_only_observes_and_never_sends_emergency_close(self):
+        body = function_body(self.source, "MonitorOpenBuyProtection")
+        self.assertIn(
+            "if(EnableDemoTrading && !CloseUnprotectedPosition(ticket))",
+            body,
+        )
+        self.assertIn("Safe mode is active; no automatic close will be sent", body)
+
 
 if __name__ == "__main__":
     unittest.main()
