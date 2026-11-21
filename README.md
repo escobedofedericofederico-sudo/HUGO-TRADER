@@ -116,6 +116,7 @@ on entry and stop execution, and can include an estimated round-turn commission.
 - Lot precision is derived from the broker's lot step, including fractional steps such
   as `0.25`; the EA rounds down and refuses a size below the broker minimum.
 - A same-symbol/same-magic BUY or SELL market position blocks a new entry.
+- `MagicNumber` must be positive; zero is rejected because MT4 manual orders commonly use magic 0. Assign a dedicated positive value not shared with another EA.
 - Initialization rejects accounts that are neither demo nor Strategy Tester.
 - `OnTick`, `OrderSend`, and `OrderClose` each check the demo/tester gate and
   the explicit enable switch.
