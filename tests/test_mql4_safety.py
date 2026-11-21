@@ -54,6 +54,10 @@ class Mql4SafetySourceTests(unittest.TestCase):
         self.assertIn("if(!TradingEnvironmentAllowed())", body)
         self.assertIn("return(INIT_FAILED);", body)
 
+    def test_magic_number_must_be_positive_to_avoid_manual_orders(self):
+        body = function_body(self.source, "OnInit")
+        self.assertIn("MagicNumber <= 0", body)
+
     def test_tick_handler_fails_closed_when_trading_is_not_enabled(self):
         body = function_body(self.source, "OnTick")
         self.assertIn("if(!TradingEnvironmentAllowed())", body)
