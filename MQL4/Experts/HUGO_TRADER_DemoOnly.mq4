@@ -38,7 +38,7 @@ int OnInit()
    if(!MathIsValidNumber(RiskPercent) ||
       !MathIsValidNumber(EstimatedRoundTurnCommissionPerLot) ||
       RiskPercent <= 0.0 || RiskPercent > 1.0 ||
-      StopLossPoints <= 0 || TakeProfitPoints < 0 ||
+      StopLossPoints <= 0 || TakeProfitPoints < 0 || MagicNumber <= 0 ||
       MaxSpreadPoints <= 0 || SlippagePoints < 0 ||
       EstimatedRoundTurnCommissionPerLot < 0.0)
    {
