@@ -152,6 +152,12 @@ class Mql4SafetySourceTests(unittest.TestCase):
             with self.subTest(operation=operation):
                 self.assertNotIn(operation, self.source)
 
+    def test_live_demo_order_paths_require_a_server_connection(self):
+        body = function_body(self.source, "MarketQuotesAreValid")
+        self.assertIn("if(!IsTesting() && !IsConnected())", body)
+        self.assertIn("terminal is disconnected; order operation blocked", body)
+        self.assertLess(body.index("IsConnected()"), body.index("RefreshRates()"))
+
     def test_market_quote_guard_rejects_non_finite_or_crossed_quotes(self):
         body = function_body(self.source, "MarketQuotesAreValid")
         self.assertIn("MathIsValidNumber(Bid)", body)
