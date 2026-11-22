@@ -118,6 +118,7 @@ on entry and stop execution, and can include an estimated round-turn commission.
 - A same-symbol/same-magic BUY or SELL market position blocks a new entry.
 - `MagicNumber` must be positive; zero is rejected because MT4 manual orders commonly use magic 0. Assign a dedicated positive value not shared with another EA.
 - Initialization rejects accounts that are neither demo nor Strategy Tester.
+- In a live terminal, order paths require `IsConnected()` before cached quotes are refreshed or used; Strategy Tester is exempt because it uses simulated quotes.
 - `OnTick`, `OrderSend`, and `OrderClose` each check the demo/tester gate and
   the explicit enable switch.
 - After a successful entry, the EA re-selects the broker's order and verifies that
