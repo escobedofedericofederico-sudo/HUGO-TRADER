@@ -261,6 +261,17 @@ bool CloseUnprotectedPosition(int ticket)
 
 bool MonitorOpenBuyProtection()
 {
+   // Without a live quote stream, the current-Bid protection check is unavailable.
+   // Pause the EA instead of classifying positions as unprotected or retrying
+   // emergency closes that cannot be executed while the terminal is disconnected.
+   if(!IsTesting() && !IsConnected())
+   {
+      if(g_lastUnprotectedTicket != -2)
+         Print("HUGO-TRADER WARNING: terminal disconnected; entries and protection checks are paused until reconnection.");
+      g_lastUnprotectedTicket = -2;
+      return(false);
+   }
+
    bool allProtected = true;
    int firstUnprotectedTicket = -1;
 
