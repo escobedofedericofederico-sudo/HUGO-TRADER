@@ -65,6 +65,15 @@ void OnDeinit(const int reason)
 
 bool MarketQuotesAreValid()
 {
+   // Cached prices can remain numerically valid after a live terminal disconnects.
+   // Block live order operations until the server connection is restored.
+   // Strategy Tester uses simulated quotes and is intentionally exempt.
+   if(!IsTesting() && !IsConnected())
+   {
+      Print("HUGO-TRADER: terminal is disconnected; order operation blocked.");
+      return(false);
+   }
+
    RefreshRates();
 
    if(!MathIsValidNumber(Bid) || !MathIsValidNumber(Ask) ||
