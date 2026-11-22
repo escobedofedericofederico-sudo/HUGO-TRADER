@@ -227,6 +227,14 @@ class Mql4SafetySourceTests(unittest.TestCase):
         self.assertIn("OrderMagicNumber() != MagicNumber", body)
         self.assertIn("OrderType() != OP_BUY", body)
 
+    def test_protection_monitor_pauses_without_quotes_when_terminal_is_disconnected(self):
+        body = function_body(self.source, "MonitorOpenBuyProtection")
+        guard = "if(!IsTesting() && !IsConnected())"
+        self.assertIn(guard, body)
+        self.assertIn("g_lastUnprotectedTicket = -2;", body)
+        self.assertIn("entries and protection checks are paused until reconnection", body)
+        self.assertLess(body.index(guard), body.index("for(int i = OrdersTotal()"))
+
     def test_protection_monitor_runs_even_when_entry_trading_is_disabled(self):
         tick = function_body(self.source, "OnTick")
         monitor_index = tick.index("if(!MonitorOpenBuyProtection())")
