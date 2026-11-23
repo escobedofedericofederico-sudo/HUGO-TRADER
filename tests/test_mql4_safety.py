@@ -250,5 +250,22 @@ class Mql4SafetySourceTests(unittest.TestCase):
         self.assertIn("Safe mode is active; no automatic close will be sent", body)
 
 
+    def test_position_scan_fails_closed_when_an_order_cannot_be_selected(self):
+        body = function_body(self.source, "HasOpenPosition")
+        selection_guard = "if(!OrderSelect(i, SELECT_BY_POS, MODE_TRADES))"
+        self.assertIn(selection_guard, body)
+        self.assertIn("position state unknown and new entries are blocked", body)
+        self.assertLess(body.index(selection_guard), body.index("if(OrderSymbol()"))
+        self.assertRegex(body, r"if\(!OrderSelect\([\s\S]*?return\(true\);")
+
+    def test_protection_scan_pauses_when_an_order_cannot_be_selected(self):
+        body = function_body(self.source, "MonitorOpenBuyProtection")
+        selection_guard = "if(!OrderSelect(i, SELECT_BY_POS, MODE_TRADES))"
+        self.assertIn(selection_guard, body)
+        self.assertIn("protection state unknown and entries are paused", body)
+        self.assertIn("g_lastUnprotectedTicket = -3;", body)
+        self.assertLess(body.index(selection_guard), body.index("if(OrderSymbol()"))
+        self.assertRegex(body, r"if\(!OrderSelect\([\s\S]*?return\(false\);")
+
 if __name__ == "__main__":
     unittest.main()
