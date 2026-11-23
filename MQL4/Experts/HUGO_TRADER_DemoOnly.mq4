@@ -134,7 +134,12 @@ bool HasOpenPosition()
    for(int i = OrdersTotal() - 1; i >= 0; i--)
    {
       if(!OrderSelect(i, SELECT_BY_POS, MODE_TRADES))
-         continue;
+      {
+         // An unreadable order makes the position state unknown. Fail closed:
+         // do not assume the account is flat and do not send a new entry.
+         Print("HUGO-TRADER WARNING: could not inspect an open order; position state unknown and new entries are blocked.");
+         return(true);
+      }
 
       if(OrderSymbol() == Symbol() &&
          OrderMagicNumber() == MagicNumber &&
@@ -280,7 +285,14 @@ bool MonitorOpenBuyProtection()
    for(int i = OrdersTotal() - 1; i >= 0; i--)
    {
       if(!OrderSelect(i, SELECT_BY_POS, MODE_TRADES))
-         continue;
+      {
+         // Do not skip an order that could not be inspected: it may be one
+         // of ours and its protective stop state is unknown.
+         if(g_lastUnprotectedTicket != -3)
+            Print("HUGO-TRADER WARNING: could not inspect an open order; protection state unknown and entries are paused.");
+         g_lastUnprotectedTicket = -3;
+         return(false);
+      }
 
       if(OrderSymbol() != Symbol() ||
          OrderMagicNumber() != MagicNumber ||
