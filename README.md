@@ -116,6 +116,7 @@ on entry and stop execution, and can include an estimated round-turn commission.
 - Lot precision is derived from the broker's lot step, including fractional steps such
   as `0.25`; the EA rounds down and refuses a size below the broker minimum.
 - A same-symbol/same-magic BUY or SELL market position blocks a new entry.
+- If MT4 cannot select an order during an open-order scan, the EA fails closed: it pauses protection processing and blocks new entries rather than assuming the order list is empty.
 - `MagicNumber` must be positive; zero is rejected because MT4 manual orders commonly use magic 0. Assign a dedicated positive value not shared with another EA.
 - Initialization rejects accounts that are neither demo nor Strategy Tester.
 - In a live terminal, order paths require `IsConnected()` before cached quotes are refreshed or used. While disconnected, the EA pauses entries and protection checks; the operator must inspect open positions and reconnect. Strategy Tester is exempt because it uses simulated quotes.
