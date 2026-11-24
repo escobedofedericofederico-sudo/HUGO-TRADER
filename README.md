@@ -45,7 +45,7 @@ python bot.py prices.csv --stop-loss 0.05 --take-profit 0.10 --risk 0.01
 
 - `--stop-loss 0.05`: close after a 5% adverse close-to-entry move.
 - `--take-profit 0.10`: close after a 10% favourable close-to-entry move.
-- `--risk 0.01`: risk budget used to size a position when a stop is supplied; without a stop it caps the cash allocation at 1%.
+- `--risk 0.01`: with `--stop-loss`, caps the modeled loss at the stop after entry and exit fees; without a stop it only caps the cash allocation at 1%.
 - `--fee 0.001`: 0.1% fee per simulated transaction.
 
 Stop checks use closing prices, not intraday highs/lows. Gaps, spread, slippage, taxes, dividends and partial fills are not modelled.
@@ -66,9 +66,10 @@ python bot.py prices.csv --no-memory
 ```
 
 The `--risk` argument has two modes: with `--stop-loss`, it is the fraction of
-equity budgeted to lose if the stop is reached (position notional is sized from
-that budget); without a stop, it only caps the cash allocation and does not cap
-the loss on a price gap.
+equity budgeted to lose if the stop is reached. Position sizing includes the
+configured entry and exit fee in that estimate; it does not include slippage,
+gaps, taxes or other unmodelled execution costs. Without a stop, `--risk` only
+caps the cash allocation and does not cap the loss on a price gap.
 
 The memory labels outcomes by net P&L after simulated fees:
 - **LOSS**: negative realized P&L; records the exit reason and a review lesson.

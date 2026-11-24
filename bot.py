@@ -179,7 +179,15 @@ def backtest(
                 # at the stop. Convert that risk budget into position notional.
                 allocation = cash * risk_per_trade
                 if stop_loss is not None:
-                    allocation = min(cash, cash * risk_per_trade / stop_loss)
+                    # Include both entry and exit fees in the loss budget.
+                    # For gross notional N, stop loss s and fee f, net loss is
+                    # N * (s + 2*f - s*f). Convert the allowed loss back to
+                    # the cash committed at entry, which includes the entry fee.
+                    loss_fraction = stop_loss + 2.0 * fee_rate - stop_loss * fee_rate
+                    allocation = min(
+                        cash,
+                        cash * risk_per_trade * (1.0 + fee_rate) / loss_fraction,
+                    )
                 units = allocation / (bar.close * (1 + fee_rate))
                 entry_cost = units * bar.close * (1 + fee_rate)
                 cash -= entry_cost
