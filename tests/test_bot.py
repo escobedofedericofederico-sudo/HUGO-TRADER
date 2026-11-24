@@ -77,6 +77,19 @@ class BotTests(unittest.TestCase):
         buy = next(trade for trade in result["trades"] if trade.action == "BUY")
         self.assertAlmostEqual(result["open_units"] * buy.price, 200.0)
 
+    def test_stop_risk_budget_includes_entry_and_exit_fees(self):
+        prices = [10, 9, 8, 9, 10, 11, 10.45]
+        result = backtest(
+            self.make_bars(prices), fast=2, slow=3,
+            initial_cash=1000, fee_rate=0.001, stop_loss=0.05,
+            risk_per_trade=0.01,
+        )
+        sells = [trade for trade in result["trades"] if trade.action == "SELL"]
+        self.assertEqual(len(sells), 1)
+        self.assertEqual(sells[0].reason, "stop_loss")
+        # The 1% budget is $10; both entry and exit fees must fit inside it.
+        self.assertAlmostEqual(sells[0].pnl, -10.0, places=8)
+
     def test_memory_remembers_loss_and_prevents_duplicate(self):
         with tempfile.TemporaryDirectory() as directory:
             db = os.path.join(directory, "memory.sqlite3")
