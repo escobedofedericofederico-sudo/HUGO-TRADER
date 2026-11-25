@@ -59,13 +59,50 @@ class BotTests(unittest.TestCase):
 
     def test_csv_loader_rejects_non_finite_prices(self):
         with tempfile.NamedTemporaryFile("w", suffix=".csv", delete=False) as handle:
-            handle.write("date,close\\n2025-01-01,inf\\n")
+            handle.write("date,close\n2025-01-01,inf\n")
             path = handle.name
         try:
             with self.assertRaises(ValueError):
                 load_bars(path)
         finally:
             os.unlink(path)
+
+    def test_csv_loader_accepts_strictly_increasing_iso_dates(self):
+        with tempfile.NamedTemporaryFile("w", suffix=".csv", delete=False) as handle:
+            handle.write("date,close\\n2025-01-01,100\\n2025-01-02,101\\n")
+            path = handle.name
+        try:
+            bars = load_bars(path)
+            self.assertEqual([bar.date for bar in bars], ["2025-01-01", "2025-01-02"])
+            self.assertEqual([bar.close for bar in bars], [100.0, 101.0])
+        finally:
+            os.unlink(path)
+
+    def test_csv_loader_rejects_invalid_dates(self):
+        with tempfile.NamedTemporaryFile("w", suffix=".csv", delete=False) as handle:
+            handle.write("date,close\\nnot-a-date,100\\n")
+            path = handle.name
+        try:
+            with self.assertRaisesRegex(ValueError, "ISO calendar date"):
+                load_bars(path)
+        finally:
+            os.unlink(path)
+
+    def test_csv_loader_rejects_duplicate_and_out_of_order_dates(self):
+        fixtures = (
+            "date,close\\n2025-01-01,100\\n2025-01-01,101\\n",
+            "date,close\\n2025-01-02,101\\n2025-01-01,100\\n",
+        )
+        for csv_text in fixtures:
+            with self.subTest(csv_text=csv_text):
+                with tempfile.NamedTemporaryFile("w", suffix=".csv", delete=False) as handle:
+                    handle.write(csv_text)
+                    path = handle.name
+                try:
+                    with self.assertRaisesRegex(ValueError, "strictly increasing"):
+                        load_bars(path)
+                finally:
+                    os.unlink(path)
 
     def test_stop_risk_budget_controls_position_notional(self):
         prices = [10, 9, 8, 9, 10, 11, 12, 13]
