@@ -4,6 +4,7 @@ from __future__ import annotations
 import argparse
 import csv
 import math
+from datetime import date
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Iterable
@@ -26,7 +27,9 @@ class Trade:
 
 
 def load_bars(path: str | Path) -> list[Bar]:
+    """Load positive closes from a CSV with unique, ascending ISO calendar dates."""
     bars: list[Bar] = []
+    previous_date: date | None = None
     with open(path, newline="", encoding="utf-8-sig") as handle:
         reader = csv.DictReader(handle)
         if not reader.fieldnames or not {"date", "close"}.issubset(
@@ -36,12 +39,25 @@ def load_bars(path: str | Path) -> list[Bar]:
         for row in reader:
             normalized = {k.strip().lower(): v for k, v in row.items() if k}
             try:
+                bar_date = date.fromisoformat(str(normalized.get("date", "")).strip())
+            except (TypeError, ValueError) as exc:
+                raise ValueError(
+                    f"Date must be a valid ISO calendar date (YYYY-MM-DD): {row}"
+                ) from exc
+            if previous_date is not None and bar_date <= previous_date:
+                raise ValueError(
+                    "CSV dates must be strictly increasing; duplicate or out-of-order row: "
+                    f"{row}"
+                )
+            previous_date = bar_date
+
+            try:
                 close = float(normalized["close"])
             except (TypeError, ValueError, KeyError) as exc:
                 raise ValueError(f"Invalid close price in row: {row}") from exc
             if not math.isfinite(close) or close <= 0:
                 raise ValueError(f"Close price must be finite and positive: {row}")
-            bars.append(Bar(str(normalized.get("date", "")), close))
+            bars.append(Bar(bar_date.isoformat(), close))
     if not bars:
         raise ValueError("CSV contains no price rows")
     return bars
