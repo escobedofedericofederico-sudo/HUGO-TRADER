@@ -29,7 +29,7 @@ date,close
 2026-01-03,99.80
 ```
 
-Use at least `slow + 1` rows, in chronological order.
+Use at least `slow + 1` rows. Dates must be valid `YYYY-MM-DD` ISO calendar dates, strictly increasing and unique; the loader rejects invalid, duplicate or out-of-order dates so a malformed CSV cannot silently distort chronological backtests.
 
 ## Run a backtest
 
