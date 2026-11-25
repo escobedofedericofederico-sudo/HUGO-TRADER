@@ -69,7 +69,7 @@ class BotTests(unittest.TestCase):
 
     def test_csv_loader_accepts_strictly_increasing_iso_dates(self):
         with tempfile.NamedTemporaryFile("w", suffix=".csv", delete=False) as handle:
-            handle.write("date,close\\n2025-01-01,100\\n2025-01-02,101\\n")
+            handle.write("date,close\n2025-01-01,100\n2025-01-02,101\n")
             path = handle.name
         try:
             bars = load_bars(path)
@@ -80,7 +80,7 @@ class BotTests(unittest.TestCase):
 
     def test_csv_loader_rejects_invalid_dates(self):
         with tempfile.NamedTemporaryFile("w", suffix=".csv", delete=False) as handle:
-            handle.write("date,close\\nnot-a-date,100\\n")
+            handle.write("date,close\nnot-a-date,100\n")
             path = handle.name
         try:
             with self.assertRaisesRegex(ValueError, "ISO calendar date"):
@@ -90,8 +90,8 @@ class BotTests(unittest.TestCase):
 
     def test_csv_loader_rejects_duplicate_and_out_of_order_dates(self):
         fixtures = (
-            "date,close\\n2025-01-01,100\\n2025-01-01,101\\n",
-            "date,close\\n2025-01-02,101\\n2025-01-01,100\\n",
+            "date,close\n2025-01-01,100\n2025-01-01,101\n",
+            "date,close\n2025-01-02,101\n2025-01-01,100\n",
         )
         for csv_text in fixtures:
             with self.subTest(csv_text=csv_text):
