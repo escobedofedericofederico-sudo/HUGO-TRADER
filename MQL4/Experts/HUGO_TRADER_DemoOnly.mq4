@@ -3,7 +3,7 @@
 //| Educational MA crossover EA. No real-account execution.          |
 //+------------------------------------------------------------------+
 #property strict
-#property version   "0.1.2"
+#property version   "0.1.3"
 #property description "HUGO-TRADER demo-only SMA crossover Expert Advisor"
 
 input bool   EnableDemoTrading = false; // Explicit opt-in; safe mode by default
@@ -19,6 +19,10 @@ input int    MagicNumber       = 26111501;
 
 datetime g_lastBarTime = 0;
 int g_lastUnprotectedTicket = -1;
+
+#define STOP_STATUS_UNKNOWN -1
+#define STOP_STATUS_INVALID 0
+#define STOP_STATUS_VALID 1
 
 // Strategy Tester is permitted because its orders are simulated.
 // Outside the tester, the EA accepts demo accounts only.
@@ -204,34 +208,38 @@ double CalculateLots(double spreadPoints)
    return(NormalizeDouble(lots, LotDigitsFromStep(lotStep)));
 }
 
-bool ProtectiveStopIsValid(int ticket)
+int ProtectiveStopStatus(int ticket)
 {
+   // Distinguish a confirmed bad stop from an unreadable order/quote state.
+   // Unknown must pause the EA; it must not be treated as proof of an invalid stop.
    if(!OrderSelect(ticket, SELECT_BY_TICKET))
-      return(false);
+      return(STOP_STATUS_UNKNOWN);
 
    if(OrderCloseTime() != 0 ||
       OrderSymbol() != Symbol() ||
       OrderMagicNumber() != MagicNumber ||
       OrderType() != OP_BUY ||
       !MathIsValidNumber(Point) || Point <= 0.0)
-      return(false);
+      return(STOP_STATUS_UNKNOWN);
 
-   // A BUY stop must remain below the current Bid. If price has gapped
-   // through it but the order is still open, treat the position as unprotected.
+   // Without reliable live quotes, the stop cannot be judged against current Bid.
    if(!MarketQuotesAreValid())
-      return(false);
+      return(STOP_STATUS_UNKNOWN);
 
    double stopLoss = OrderStopLoss();
    double openPrice = OrderOpenPrice();
    if(!MathIsValidNumber(stopLoss) || !MathIsValidNumber(openPrice) ||
       stopLoss <= 0.0 || stopLoss >= openPrice)
-      return(false);
+      return(STOP_STATUS_INVALID);
 
    // Allow only the configured entry-slippage reserve beyond the requested stop.
    double actualStopPoints = (openPrice - stopLoss) / Point;
-   return(MathIsValidNumber(actualStopPoints) &&
-          actualStopPoints <= StopLossPoints + SlippagePoints + 0.5 &&
-          stopLoss < Bid);
+   if(!MathIsValidNumber(actualStopPoints) ||
+      actualStopPoints > StopLossPoints + SlippagePoints + 0.5 ||
+      stopLoss >= Bid)
+      return(STOP_STATUS_INVALID);
+
+   return(STOP_STATUS_VALID);
 }
 
 bool CloseUnprotectedPosition(int ticket)
@@ -300,7 +308,19 @@ bool MonitorOpenBuyProtection()
          continue;
 
       int ticket = OrderTicket();
-      if(!ProtectiveStopIsValid(ticket))
+      int protectionStatus = ProtectiveStopStatus(ticket);
+
+      if(protectionStatus == STOP_STATUS_UNKNOWN)
+      {
+         // Unknown is not the same as invalid. Pause entries and do not send a
+         // speculative close while the order or quote state cannot be verified.
+         if(ticket != g_lastUnprotectedTicket)
+            Print("HUGO-TRADER WARNING: open BUY protection state is unknown; no emergency close was sent. Check MT4 order/quote state before resuming. Ticket=", ticket);
+         g_lastUnprotectedTicket = ticket;
+         return(false);
+      }
+
+      if(protectionStatus == STOP_STATUS_INVALID)
       {
          allProtected = false;
          if(firstUnprotectedTicket < 0)
@@ -309,9 +329,9 @@ bool MonitorOpenBuyProtection()
          if(ticket != g_lastUnprotectedTicket)
          {
             if(EnableDemoTrading)
-               Print("HUGO-TRADER CRITICAL: open BUY protection is invalid or could not be verified. Attempting demo-only emergency close. Ticket=", ticket);
+               Print("HUGO-TRADER CRITICAL: open BUY has a confirmed invalid protective stop. Attempting demo-only emergency close. Ticket=", ticket);
             else
-               Print("HUGO-TRADER WARNING: open BUY protection is invalid or could not be verified. Safe mode is active; no automatic close will be sent. Check the MT4 terminal. Ticket=", ticket);
+               Print("HUGO-TRADER WARNING: open BUY has a confirmed invalid protective stop. Safe mode is active; no automatic close will be sent. Check the MT4 terminal. Ticket=", ticket);
          }
 
          if(EnableDemoTrading && !CloseUnprotectedPosition(ticket))
@@ -400,11 +420,21 @@ bool OpenDemoBuy()
 
    Print("HUGO-TRADER: demo buy opened. Ticket=", orderTicket, " lots=", lots);
 
-   if(!ProtectiveStopIsValid(orderTicket))
+   int protectionStatus = ProtectiveStopStatus(orderTicket);
+   if(protectionStatus != STOP_STATUS_VALID)
    {
-      Print("HUGO-TRADER CRITICAL: entry has no valid protective stop or its stop distance exceeds the configured slippage reserve. Attempting immediate close.");
-      if(!CloseUnprotectedPosition(orderTicket))
-         Print("HUGO-TRADER CRITICAL: emergency close failed or the order is no longer selectable. Check the MT4 terminal immediately. Ticket=", orderTicket);
+      if(protectionStatus == STOP_STATUS_INVALID)
+      {
+         Print("HUGO-TRADER CRITICAL: entry has a confirmed invalid protective stop. Attempting immediate demo-only close.");
+         if(!CloseUnprotectedPosition(orderTicket))
+            Print("HUGO-TRADER CRITICAL: emergency close failed. Check the MT4 terminal immediately. Ticket=", orderTicket);
+      }
+      else
+      {
+         // Do not guess that the stop is invalid when order/quote state is unreadable.
+         // The broker received a stop with OrderSend; require manual verification.
+         Print("HUGO-TRADER CRITICAL: protective stop state could not be verified after entry. No automatic close was attempted because order/quote state is unknown. Inspect the MT4 terminal immediately. Ticket=", orderTicket);
+      }
       return(false);
    }
 
