@@ -115,18 +115,24 @@ class Mql4SafetySourceTests(unittest.TestCase):
         self.assertIn("stopDistanceFromBid < stopLevel", body)
 
     def test_successful_entry_verifies_the_broker_kept_a_protective_stop(self):
-        verify = function_body(self.source, "ProtectiveStopIsValid")
+        verify = function_body(self.source, "ProtectiveStopStatus")
         self.assertIn("OrderStopLoss()", verify)
         self.assertIn("OrderOpenPrice()", verify)
         self.assertIn("OrderCloseTime() != 0", verify)
+        self.assertIn("MarketQuotesAreValid()", verify)
+        self.assertIn("return(STOP_STATUS_UNKNOWN)", verify)
+        self.assertIn("return(STOP_STATUS_INVALID)", verify)
+        self.assertIn("return(STOP_STATUS_VALID)", verify)
         self.assertIn(
-            "actualStopPoints <= StopLossPoints + SlippagePoints + 0.5",
+            "actualStopPoints > StopLossPoints + SlippagePoints + 0.5",
             verify,
         )
 
         open_body = function_body(self.source, "OpenDemoBuy")
-        self.assertIn("if(!ProtectiveStopIsValid(orderTicket))", open_body)
+        self.assertIn("ProtectiveStopStatus(orderTicket)", open_body)
+        self.assertIn("protectionStatus == STOP_STATUS_INVALID", open_body)
         self.assertIn("CloseUnprotectedPosition(orderTicket)", open_body)
+        self.assertIn("order/quote state is unknown", open_body)
 
     def test_emergency_close_is_demo_gated_and_limited_to_our_open_buy(self):
         body = function_body(self.source, "CloseUnprotectedPosition")
@@ -196,22 +202,27 @@ class Mql4SafetySourceTests(unittest.TestCase):
         self.assertIn("MathIsValidNumber(EstimatedRoundTurnCommissionPerLot)", body)
 
     def test_protective_stop_validation_rejects_invalid_prices_and_point(self):
-        body = function_body(self.source, "ProtectiveStopIsValid")
+        body = function_body(self.source, "ProtectiveStopStatus")
         self.assertIn("MathIsValidNumber(Point)", body)
         self.assertIn("MathIsValidNumber(stopLoss)", body)
         self.assertIn("MathIsValidNumber(openPrice)", body)
+        self.assertIn("return(STOP_STATUS_UNKNOWN)", body)
+        self.assertIn("return(STOP_STATUS_INVALID)", body)
 
 
     def test_protective_stop_must_remain_below_current_bid(self):
-        body = function_body(self.source, "ProtectiveStopIsValid")
+        body = function_body(self.source, "ProtectiveStopStatus")
         self.assertIn("MarketQuotesAreValid()", body)
-        self.assertIn("stopLoss < Bid", body)
+        self.assertIn("stopLoss >= Bid", body)
+        self.assertIn("return(STOP_STATUS_UNKNOWN)", body)
+        self.assertIn("return(STOP_STATUS_INVALID)", body)
 
     def test_open_buy_protection_is_checked_before_the_new_bar_gate(self):
         monitor = function_body(self.source, "MonitorOpenBuyProtection")
         self.assertIn("OrdersTotal()", monitor)
         self.assertIn("OrderSelect(i, SELECT_BY_POS, MODE_TRADES)", monitor)
-        self.assertIn("ProtectiveStopIsValid(ticket)", monitor)
+        self.assertIn("ProtectiveStopStatus(ticket)", monitor)
+        self.assertIn("protectionStatus == STOP_STATUS_INVALID", monitor)
         self.assertIn("CloseUnprotectedPosition(ticket)", monitor)
 
         tick = function_body(self.source, "OnTick")
@@ -249,6 +260,23 @@ class Mql4SafetySourceTests(unittest.TestCase):
         )
         self.assertIn("Safe mode is active; no automatic close will be sent", body)
 
+
+    def test_unknown_protection_state_pauses_without_attempting_emergency_close(self):
+        monitor = function_body(self.source, "MonitorOpenBuyProtection")
+        unknown_branch = monitor.split(
+            "if(protectionStatus == STOP_STATUS_UNKNOWN)", 1
+        )[1].split("if(protectionStatus == STOP_STATUS_INVALID)", 1)[0]
+        self.assertIn("return(false);", unknown_branch)
+        self.assertNotIn("CloseUnprotectedPosition(", unknown_branch)
+        self.assertIn("no emergency close was sent", unknown_branch)
+
+    def test_only_confirmed_invalid_stop_triggers_emergency_close(self):
+        monitor = function_body(self.source, "MonitorOpenBuyProtection")
+        invalid_branch = monitor.split(
+            "if(protectionStatus == STOP_STATUS_INVALID)", 1
+        )[1]
+        self.assertIn("CloseUnprotectedPosition(ticket)", invalid_branch)
+        self.assertNotIn("STOP_STATUS_UNKNOWN", invalid_branch)
 
     def test_position_scan_fails_closed_when_an_order_cannot_be_selected(self):
         body = function_body(self.source, "HasOpenPosition")
