@@ -123,16 +123,18 @@ on entry and stop execution, and can include an estimated round-turn commission.
 - In a live terminal, order paths require `IsConnected()` before cached quotes are refreshed or used. While disconnected, the EA pauses entries and protection checks; the operator must inspect open positions and reconnect. Strategy Tester is exempt because it uses simulated quotes.
 - `OnTick`, `OrderSend`, and `OrderClose` each check the demo/tester gate and
   the explicit enable switch.
-- After a successful entry, the EA re-selects the broker's order and verifies that
-  a stop-loss is present, is below the BUY open price, and is not farther away than
-  the configured stop plus the slippage reserve. If that check fails, it attempts
-  an immediate demo-only close and prints a critical warning if the close fails.
-  This is a best-effort emergency response, not a guarantee against broker, network,
-  or market failure; the terminal must be checked if the critical warning appears.
+- After a successful entry, the EA re-selects the broker's order and classifies
+  protection as **valid**, **confirmed invalid**, or **unknown**. A confirmed invalid
+  stop (missing, above the BUY open price, too far from the configured distance, or
+  at/above current Bid) triggers a demo-only emergency-close attempt. If the order or
+  quote state cannot be read reliably, the EA pauses entries and requires manual
+  inspection instead of guessing that the stop is invalid or sending a speculative
+  close. This is a best-effort response, not a guarantee against broker, network,
+  or market failure.
 - On every tick, before the new-candle strategy gate, the EA rechecks each matching open
-  BUY. A missing/invalid stop or a stop at/above current Bid triggers a demo-only
-  emergency-close attempt; failure is logged as critical and requires manual terminal
-  inspection. This remains best-effort and cannot guarantee execution during outages.
+  BUY. Confirmed-invalid protection can trigger a demo-only emergency-close attempt;
+  unknown order/quote state pauses the tick without an automatic close. Any critical
+  close warning requires immediate manual terminal inspection.
 - Strategy Tester is allowed because its trades are simulated; outside the tester,
   only an account for which MT4 reports `IsDemo()` is accepted.
 - No credentials, API keys, or broker passwords are used or stored.
