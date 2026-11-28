@@ -295,11 +295,11 @@ class Mql4SafetySourceTests(unittest.TestCase):
         self.assertIn("CloseUnprotectedPosition(ticket)", invalid_branch)
         self.assertNotIn("STOP_STATUS_UNKNOWN", invalid_branch)
 
-    def test_position_scan_fails_closed_when_an_order_cannot_be_selected(self):
+    def test_conflicting_order_scan_fails_closed_when_an_order_cannot_be_selected(self):
         body = function_body(self.source, "HasConflictingOrder")
         selection_guard = "if(!OrderSelect(i, SELECT_BY_POS, MODE_TRADES))"
         self.assertIn(selection_guard, body)
-        self.assertIn("position state unknown and new entries are blocked", body)
+        self.assertIn("order state unknown and new entries are blocked", body)
         self.assertLess(body.index(selection_guard), body.index("if(OrderSymbol()"))
         self.assertRegex(body, r"if\(!OrderSelect\([\s\S]*?return\(true\);")
 
