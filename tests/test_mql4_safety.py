@@ -103,11 +103,28 @@ class Mql4SafetySourceTests(unittest.TestCase):
         self.assertIn("MathAbs", body)
 
     def test_existing_buy_or_sell_position_blocks_duplicate_entry(self):
-        body = function_body(self.source, "HasOpenPosition")
+        body = function_body(self.source, "HasConflictingOrder")
         self.assertIn("OrderType() == OP_BUY", body)
         self.assertIn("OrderType() == OP_SELL", body)
         tick = function_body(self.source, "OnTick")
-        self.assertIn("if(HasOpenPosition())", tick)
+        self.assertIn("if(HasConflictingOrder())", tick)
+
+    def test_pending_orders_with_same_symbol_and_magic_block_new_entries(self):
+        body = function_body(self.source, "HasConflictingOrder")
+        for order_type in (
+            "OP_BUYLIMIT",
+            "OP_SELLLIMIT",
+            "OP_BUYSTOP",
+            "OP_SELLSTOP",
+        ):
+            with self.subTest(order_type=order_type):
+                self.assertIn(order_type, body)
+        self.assertIn("OrderSymbol() == Symbol()", body)
+        self.assertIn("OrderMagicNumber() == MagicNumber", body)
+        self.assertIn(
+            "if(HasConflictingOrder())",
+            function_body(self.source, "OpenDemoBuy"),
+        )
 
     def test_broker_stop_level_validation_accounts_for_spread(self):
         body = function_body(self.source, "OpenDemoBuy")
@@ -179,8 +196,8 @@ class Mql4SafetySourceTests(unittest.TestCase):
 
     def test_entry_rechecks_for_an_existing_position_before_order_send(self):
         body = function_body(self.source, "OpenDemoBuy")
-        self.assertIn("if(HasOpenPosition())", body)
-        self.assertLess(body.index("if(HasOpenPosition())"), body.index("OrderSend("))
+        self.assertIn("if(HasConflictingOrder())", body)
+        self.assertLess(body.index("if(HasConflictingOrder())"), body.index("OrderSend("))
 
     def test_margin_check_rejects_non_finite_or_non_positive_result(self):
         body = function_body(self.source, "OpenDemoBuy")
@@ -279,7 +296,7 @@ class Mql4SafetySourceTests(unittest.TestCase):
         self.assertNotIn("STOP_STATUS_UNKNOWN", invalid_branch)
 
     def test_position_scan_fails_closed_when_an_order_cannot_be_selected(self):
-        body = function_body(self.source, "HasOpenPosition")
+        body = function_body(self.source, "HasConflictingOrder")
         selection_guard = "if(!OrderSelect(i, SELECT_BY_POS, MODE_TRADES))"
         self.assertIn(selection_guard, body)
         self.assertIn("position state unknown and new entries are blocked", body)
