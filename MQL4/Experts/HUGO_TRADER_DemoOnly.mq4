@@ -132,22 +132,28 @@ bool FindOpenBuy(int &ticket)
    return(false);
 }
 
-bool HasOpenPosition()
+bool HasConflictingOrder()
 {
-   // Block duplicate entries even if another EA/order uses a sell with this magic.
+   // Block a new market entry if any market or pending order shares this
+   // symbol/magic pair. Pending orders can later become market positions.
    for(int i = OrdersTotal() - 1; i >= 0; i--)
    {
       if(!OrderSelect(i, SELECT_BY_POS, MODE_TRADES))
       {
-         // An unreadable order makes the position state unknown. Fail closed:
+         // An unreadable order makes the order state unknown. Fail closed:
          // do not assume the account is flat and do not send a new entry.
-         Print("HUGO-TRADER WARNING: could not inspect an open order; position state unknown and new entries are blocked.");
+         Print("HUGO-TRADER WARNING: could not inspect an open order; order state unknown and new entries are blocked.");
          return(true);
       }
 
       if(OrderSymbol() == Symbol() &&
          OrderMagicNumber() == MagicNumber &&
-         (OrderType() == OP_BUY || OrderType() == OP_SELL))
+         (OrderType() == OP_BUY ||
+          OrderType() == OP_SELL ||
+          OrderType() == OP_BUYLIMIT ||
+          OrderType() == OP_SELLLIMIT ||
+          OrderType() == OP_BUYSTOP ||
+          OrderType() == OP_SELLSTOP))
          return(true);
    }
 
@@ -359,7 +365,7 @@ bool OpenDemoBuy()
    }
 
    // Re-check immediately before sizing/sending to reduce duplicate-entry races.
-   if(HasOpenPosition())
+   if(HasConflictingOrder())
    {
       Print("HUGO-TRADER: existing market position detected immediately before entry; order blocked.");
       return(false);
@@ -506,7 +512,7 @@ void OnTick()
       return;
    }
 
-   if(HasOpenPosition())
+   if(HasConflictingOrder())
    {
       Print("HUGO-TRADER: existing market position with this symbol/magic; new entry blocked.");
       return;
