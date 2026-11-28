@@ -15,9 +15,10 @@ Do not attach it to a real account. Do not change the guards to make a real acco
 
 ## Entry and risk controls
 
-- One BUY position maximum per symbol and magic number. A BUY or SELL market order with the same symbol/magic blocks another entry.
+- One active order maximum per symbol and magic number. Any BUY/SELL market order or BUY LIMIT/SELL LIMIT/BUY STOP/SELL STOP pending order with the same symbol/magic blocks a new entry, because a pending order can later become a market position.
+- The EA does not create pending orders; this check also protects against an accidental collision with another EA or manually placed pending order using the same magic number.
 - `MagicNumber` must be a positive integer. Zero is rejected because MT4 manual orders commonly use magic 0; use a dedicated positive value that is not shared with another EA.
-- The position check is repeated inside the entry function immediately before sizing and sending the order.
+- The conflicting-order check is repeated inside the entry function immediately before sizing and sending the order.
 - Risk percentage is limited to 1% of current account equity.
 - Stop-loss is mandatory. Take-profit may be disabled with zero.
 - Lot size is rounded down to the broker lot step. The EA never rounds up to the minimum lot when that would exceed the estimated risk budget.
